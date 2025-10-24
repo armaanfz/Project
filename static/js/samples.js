@@ -106,6 +106,51 @@ function applyTransform() {
 function adjustZoom() {
     scale = parseFloat(zoomSlider.value);
     applyTransform();
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) {
+        if (scale > 1.01) {
+        resetBtn.style.display = 'inline-block';
+        } else {
+        resetBtn.style.display = 'none';
+        }
+    }
+}
+
+// Change zoom via + / - buttons by delta (e.g., 0.1)
+function changeZoom(delta) {
+    const zoomSlider = document.getElementById('zoom-slider');
+    if (!zoomSlider) return;
+
+    const min = parseFloat(zoomSlider.min) || 1;
+    const max = parseFloat(zoomSlider.max) || 5;
+    const step = parseFloat(zoomSlider.step) || 0.1;
+
+    let newZoom = parseFloat(zoomSlider.value) + delta;
+
+    // round to nearest step precision
+    const precision = (step.toString().split('.')[1] || '').length;
+    const factor = Math.pow(10, precision);
+    newZoom = Math.round(newZoom * factor) / factor;
+
+    // clamp
+    newZoom = Math.max(min, Math.min(max, newZoom));
+
+    zoomSlider.value = newZoom;
+    // call your existing adjustZoom to apply the change
+    if (typeof adjustZoom === 'function') {
+        adjustZoom();
+    } else {
+        // fallback: trigger change event
+        zoomSlider.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (resetBtn) {
+        if (newZoom > 1.01) {
+        resetBtn.style.display = 'inline-block';
+        } else {
+        resetBtn.style.display = 'none';
+        }
+    }
 }
 
 // Combine Predefined and Adjustable Custom Filters

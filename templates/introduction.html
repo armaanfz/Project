@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnifier</title>
+    <!-- load styles from Flask static/ -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/introduction.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>INTRODUCTION</h1>
+    </div>
+    <div class="introduction">
+        <h1>Role of Purdue</h1>
+        <ul>
+            <li>Creation of a hardware component along with a working prototype which can be used for user testing</li>
+            <li>Creation of a rudimentary software architecture to test the product</li>
+        </ul>
+        <h1>Role of KARE</h1>
+        <ul>
+            <li>To remove the hindrances of bulky, expensive magnification equipment</li>
+            <li>To bridge the gap in opportunities between visually capable and visually impaired students</li>
+            <li>To facilitate access to information written in small text fonts such as textbooks for students who are visually impaired</li>
+            <li>To build a device at a competitive price point (&lt;$3500)</li>
+        </ul>
+        <h1> Who needs it </h1>
+        <p> This is used for ISBVI (Indiana School for the Partially Blind and
+            Visually Impaired) students, is primarily intended to benefit partially
+            impaired students who attend ISBVI. These students can use the
+            magnifier for reading the books by the features that are available in the
+            app or website.</p>
+        <h1>How it works</h1>
+            <p>The Software that has been created by the KARE students should take the
+                input of live streaming video of the book that the students want to read
+                using the camera(Intel D415) that has been connected to raspberry pi and
+                that input should be transferred to the software through bluetooth or wifi
+                The software contains the features to apply color filters, zoom in and
+                zoom out for the input video that can be helpful to the students to
+                convert the video as they need using different filters and can view the
+                image closer using the zoom option and the icons of all these features will
+                be larger in size so that they can easily find their requirements and also
+                we added an option named toggle screen that can help them to maximize
+                the video.</p>
+    </div>
+    <!-- replace the existing Next button -->
+    <button id="next-btn" onclick="window.location.href='{{ url_for('samples') }}'">Next</button>
+
+    <!-- load introduction JS from Flask static/ -->
+    <script defer src="{{ url_for('static', filename='js/introduction.js') }}"></script>
+</body>
+</html>

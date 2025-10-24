@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adjustable Webcam Access with Zoom</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/samples.css') }}">
+</head>
+
+<body>
+    <button class="btn" id="back-btn" onclick="goHome()">⟵ Back</button>
+    <div id="video-container">
+        <video id="video" autoplay playsinline></video>
+        
+        <div id="controls">
+            <button class="btn" id="filter-button" onclick="toggleMenu()">Filters</button>
+            <button class="btn" id="reset-btn" onclick="resetZoom()" style="display: none;">Reset Zoom</button>
+        </div>
+        
+        <div class="zoom-container">
+            <input type="range" id="zoom-slider" min="1" max="5" step="0.1" value="1" onchange="adjustZoom()">
+        </div>
+    </div>
+
+    <div id="menu" class="hidden">
+        <div id="filter-list">
+            <h3>Predefined Filters</h3>
+            <div class="scrollable">
+                <button class="filter-btn" onclick="applyNormal()">Normal</button>
+                <button class="filter-btn" onclick="applyProtanopia()">Protanopia</button>
+                <button class="filter-btn" onclick="applyDeuteranopia()">Deuteranopia</button>
+                <button class="filter-btn" onclick="applyTritanopia()">Tritanopia</button>
+                <button class="filter-btn" onclick="applyLightBlue()">Light Blue</button>
+                <button class="filter-btn" onclick="applyLightGreen()">Light Green</button>
+                <button class="filter-btn" onclick="applyLightPink()">Light Pink</button>
+                <button class="filter-btn" onclick="applyLightYellow()">Light Yellow</button>
+                <button class="filter-btn" onclick="applyGrayscale()">Grayscale</button>
+                <button class="filter-btn" onclick="applyInverted()">Inverted</button>
+                <button class="filter-btn" onclick="applyInvertedGrayscale()">Inverted Grayscale</button>
+                <button class="filter-btn" onclick="applyYellowOnBlue()">Yellow on Blue</button>
+                <button class="filter-btn" onclick="applyBlueOnYellow()">Blue on Yellow</button>
+                <button class="filter-btn" onclick="applyNeonOrangeOnBlack()">Neon Orange on Black</button>
+                <button class="filter-btn" onclick="applyNeonGreenOnBlack()">Neon Green on Black</button>
+                <button class="filter-btn" onclick="applyYellowOnBlack()">Yellow on Black</button>
+                <button class="filter-btn" onclick="applyPurpleOnBlack()">Purple on Black</button>
+            </div>
+
+            <div class="custom-filter">
+                <h3>Adjustable Filters</h3>
+
+                <div class="custom-slider-group">
+                    <div class="custom-slider-col">
+                        <label for="hue">Hue</label>
+                        <input type="range" id="hue" min="0" max="360" value="0" onchange="applyCustomFilter()">
+                    </div>
+
+                    <div class="custom-slider-col">
+                        <label for="brightness">Brightness</label>
+                        <input type="range" id="brightness" min="0" max="200" value="100" onchange="applyCustomFilter()">
+                    </div>
+
+                    <div class="custom-slider-col">
+                        <label for="contrast">Contrast</label>
+                        <input type="range" id="contrast" min="0" max="200" value="100" onchange="applyCustomFilter()">
+                    </div>
+
+                    <div class="custom-slider-col">
+                        <label for="saturation">Saturation</label>
+                        <input type="range" id="saturation" min="0" max="200" value="100" onchange="applyCustomFilter()">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- load samples js from Flask static/ -->
+    <script defer src="{{ url_for('static', filename='js/samples.js') }}"></script>
+</body>
+
+</html>

@@ -1,0 +1,55 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-image: url('https://static.wixstatic.com/media/870ce1_6e17d70ce7cf4616808641988252e0ca~mv2.png/v1/fill/w_987,h_576,al_c,q_90,usm_0.66_1.00_0.01,enc_auto/Full_Assembly_Spring_22_2022-Apr-05_07-42-33PM-000_CustomizedView19710368133.png'); /* Specify the URL of your image */
+    background-size:center ;
+    height: 100vh;
+    overflow: auto;
+}
+
+.container {
+    background-color: #333;
+    color: white;
+    padding: 10px;
+    width: 100%;
+    text-align: center;
+}
+
+.introduction {
+    background-color: white;
+    color: black;
+    padding: 20px;
+    border: 2px solid black;
+    width: 80%;
+    max-width: 1200px;
+    margin-top: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.introduction h1 {
+    font-size: 24px;
+    margin-top: 0;
+}
+
+.introduction ul {
+    list-style-type: disc;
+    padding-left: 20px;
+}
+
+#next-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #333;
+    color: white;
+    border: none;
+    border-radius: 5px;
+}

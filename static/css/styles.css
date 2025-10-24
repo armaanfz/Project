@@ -1,0 +1,100 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-image: url('magnifier.png'); /* Specify the local path */
+    background-size: cover; /* Cover the entire background */
+    background-position: center 7%; /* Center horizontally, 7% from the top */
+}
+
+nav {
+    background-color: #333;
+    color: white;
+    padding: 10px 0;
+}
+
+.container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+h1 {
+    margin: 0;
+    font-size: 36px;
+}
+
+h2 {
+    font-size: 36px;
+    color: azure;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+nav ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+nav ul li {
+    display: inline;
+    margin-right: 20px;
+}
+
+nav ul li a {
+    color: white;
+    text-decoration: none;
+}
+
+.info-box {
+    display: none;
+    width: 900px;
+    height: 450px;
+    background-color: lightgray;
+    position: fixed;
+    top: 55%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border: 2px solid black;
+    overflow-y: auto; /* Add scroll feature */
+}
+
+#next-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #333;
+    color: white;
+    border: none;
+    border-radius: 5px;
+}
+
+/* Team Container Specific Styles */
+.team-container {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.team-column {
+    width: 45%;
+    overflow-y: auto; /* Add scroll feature */
+}
+
+.team-column h2 {
+    margin-top: 0;
+}
+

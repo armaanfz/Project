@@ -206,22 +206,6 @@ function applyTritanopia() {
     applyFilter('grayscale(100%) sepia(100%) hue-rotate(180deg)');
 }
 
-function applyLightBlue() {
-    applyFilter('brightness(150%) contrast(100%) sepia(20%) hue-rotate(180deg)');
-}
-
-function applyLightGreen() {
-    applyFilter('brightness(130%) saturate(200%) hue-rotate(100deg)');
-}
-
-function applyLightPink() {
-    applyFilter('brightness(120%) contrast(100%) sepia(30%) hue-rotate(330deg)');
-}
-
-function applyLightYellow() {
-    applyFilter('brightness(140%) contrast(150%) hue-rotate(60deg)');
-}
-
 function applyGrayscale() {
     applyFilter('grayscale(100%)');
 }
@@ -232,10 +216,6 @@ function applyInverted() {
 
 function applyInvertedGrayscale() {
     applyFilter('grayscale(100%) invert(100%)');
-}
-
-function applyYellowOnBlue() {
-    applyFilter('invert(100%) sepia(100%) hue-rotate(180deg) saturate(300%) brightness(50%)');
 }
 
 function applyBlueOnYellow() {

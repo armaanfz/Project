@@ -22,6 +22,98 @@ let isDragging = false; // Track dragging state
 let startX = 0; // Initial X position on drag start
 let startY = 0; // Initial Y position on drag start
 
+/* ---------- Camera / 1080p helpers ---------- */
+/**
+ * startCamera(videoEl, opts)
+ *  - requests camera with preferred 1920x1080 resolution.
+ *  - opts: { preferExact1080: boolean }  // default false (uses ideal: 1920x1080)
+ *  - returns the MediaStream that was obtained.
+ */
+async function startCamera(videoEl, opts = {}) {
+  if (!videoEl || !(videoEl instanceof HTMLVideoElement)) {
+    throw new Error('startCamera: videoEl must be a HTMLVideoElement');
+  }
+
+  const preferExact = !!opts.preferExact1080;
+  const widthConstraint = preferExact ? { exact: 1920 } : { ideal: 1920 };
+  const heightConstraint = preferExact ? { exact: 1080 } : { ideal: 1080 };
+
+  const constraints = {
+    audio: false,
+    video: {
+      width: widthConstraint,
+      height: heightConstraint,
+      frameRate: { ideal: 30, max: 60 }
+    }
+  };
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    videoEl.srcObject = stream;
+    videoEl.autoplay = true;
+    videoEl.playsInline = true;
+    videoEl.muted = true; // recommended for autoplay
+
+    // Wait for metadata so video.videoWidth/video.videoHeight are available
+    await new Promise((resolve) => {
+      if (videoEl.readyState >= 1 && videoEl.videoWidth && videoEl.videoHeight) {
+        return resolve();
+      }
+      function onMeta() {
+        videoEl.removeEventListener('loadedmetadata', onMeta);
+        resolve();
+      }
+      videoEl.addEventListener('loadedmetadata', onMeta);
+    });
+
+    console.log('Camera started. Negotiated resolution:', videoEl.videoWidth, 'x', videoEl.videoHeight);
+    return stream;
+  } catch (err) {
+    console.error('startCamera: getUserMedia failed', err);
+    throw err;
+  }
+}
+
+function setCanvasToVideoSize(canvas, videoEl, scale = 1.0) {
+  if (!canvas || !videoEl) return;
+
+  // Prefer intrinsic video pixel size; fallback to CSS layout size
+  const videoPixelW = videoEl.videoWidth || Math.round(videoEl.getBoundingClientRect().width);
+  const videoPixelH = videoEl.videoHeight || Math.round(videoEl.getBoundingClientRect().height);
+
+  const w = Math.max(1, Math.round(videoPixelW * scale));
+  const h = Math.max(1, Math.round(videoPixelH * scale));
+
+  // Pixel buffer size used for processing
+  canvas.width = w;
+  canvas.height = h;
+
+  // CSS size (how big the canvas appears on the page) — match layout to preserve appearance
+  canvas.style.width = `${Math.round(videoPixelW)}px`;
+  canvas.style.height = `${Math.round(videoPixelH)}px`;
+}
+
+/* Optional: auto-start camera when DOM is ready. If you start camera manually elsewhere, remove this block. */
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const vid = document.getElementById('video');
+    if (!vid) return;
+    // Change preferExact1080 to true if you want the getUserMedia call to fail when 1080p not available.
+    await startCamera(vid, { preferExact1080: false });
+
+    // Example: if you already have overlay canvas(s), align them to the negotiated size:
+    const overlay = document.getElementById('overlay-canvas') || document.getElementById('tritanopia-overlay-canvas');
+    if (overlay instanceof HTMLCanvasElement) {
+      // If you want full native processing, use scale = 1.0
+      setCanvasToVideoSize(overlay, vid, 1.0);
+    }
+  } catch (e) {
+    console.warn('Camera auto-start failed or was denied:', e);
+  }
+});
+/* ---------- end camera / 1080p helpers ---------- */
+
+
 // Add event listeners to enable drag panning
 videoContainer.addEventListener('mousedown', (e) => {
     isDragging = true;
@@ -176,18 +268,33 @@ function applyFilter(filter) {
     applyCombinedFilters();
 }
 
-// Access user's camera
-if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-    }).then(function (stream) {
-        videoElement.srcObject = stream;
-    }).catch(function (error) {
-        console.error('Error accessing the camera:', error);
-    });
-} else {
-    console.error('getUserMedia is not supported in this browser');
-}
+(async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('getUserMedia is not supported in this browser');
+        return;
+    }
+
+    try {
+        // startCamera will set videoElement.srcObject and wait for loadedmetadata
+        const stream = await startCamera(videoElement, { preferExact1080: false });
+
+        // Optional: after camera starts, align any overlay / processing canvases to the native video pixels
+        // If you use different canvas ids, add them here or call setCanvasToVideoSize wherever you create canvases.
+        const overlayIds = ['overlay-canvas', 'tritanopia-overlay-canvas'];
+        overlayIds.forEach(id => {
+            const c = document.getElementById(id);
+            if (c instanceof HTMLCanvasElement) setCanvasToVideoSize(c, videoElement, 1.0);
+        });
+
+        // Log final negotiated resolution
+        console.log('Camera stream active. Negotiated resolution (videoElement):', videoElement.videoWidth, 'x', videoElement.videoHeight);
+
+        // If you need to switch to environment-facing camera specifically, you can select a deviceId from enumerateDevices
+        // and pass deviceId: { exact: '...'} to startCamera by adding support for deviceId in startCamera constraints.
+    } catch (err) {
+        console.error('Camera startup failed:', err);
+    }
+})();
 
 // Example predefined filters
 function applyNormal() {
@@ -195,15 +302,15 @@ function applyNormal() {
 }
 
 function applyProtanopia() {
-    applyFilter('grayscale(100%) sepia(100%) hue-rotate(270deg)');
+    applyFilter('url(#filter-protanopia)');
 }
 
 function applyDeuteranopia() {
-    applyFilter('grayscale(100%) sepia(100%) hue-rotate(90deg)');
+    applyFilter('url(#filter-deuteranopia)');
 }
 
 function applyTritanopia() {
-    applyFilter('grayscale(100%) sepia(100%) hue-rotate(180deg)');
+    applyFilter('url(#filter-tritanopia)');
 }
 
 function applyGrayscale() {

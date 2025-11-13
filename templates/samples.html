@@ -9,9 +9,41 @@
 </head>
 
 <body>
+    <!-- realistic color-blindness SVG filters (keep for protan/deutan) -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+        <defs>
+            <!-- Protanopia -->
+            <filter id="filter-protanopia">
+            <feColorMatrix type="matrix" values="
+                0.152  1.053 -0.205  0  0
+                0.115  0.786  0.099  0  0
+                -0.004 -0.048  1.052  0  0
+                0      0      0      1  0"/>
+            </filter>
+
+            <!-- Deuteranopia -->
+            <filter id="filter-deuteranopia">
+            <feColorMatrix type="matrix" values="
+                0.367  0.861 -0.228  0  0
+                0.280  0.673  0.047  0  0
+                -0.012  0.043  0.969  0  0
+                0      0      0      1  0"/>
+            </filter>
+            
+            <!-- Tritanopia -->
+            <filter id="filter-tritanopia">
+            <feColorMatrix type="matrix" values="
+                1.256 -0.077 -0.179  0  0
+                -0.078  0.931  0.148  0  0
+                0.005  0.691  0.304  0  0
+                0      0      0      1  0"/>
+            </filter>
+        </defs>
+    </svg>
+
     <button class="btn" id="back-btn" onclick="goHome()">⟵ Back</button>
     <div id="video-container">
-        <video id="video" autoplay playsinline></video>
+        <video id="video" src="" autoplay playsinline muted></video>
         
         <div id="controls">
             <button class="btn" id="filter-button" onclick="toggleMenu()">Filters</button>

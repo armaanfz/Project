@@ -70,17 +70,6 @@ body, html {
     box-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
 }
 
-#zoom-slider {
-    position: absolute;
-    top: 50%;
-    left: 10px;
-    transform: translateY(-50%);
-    height: 300px;
-    writing-mode: bt-lr;
-    -webkit-appearance: slider-vertical;
-    appearance: slider-vertical;
-}
-
 /* Responsive filter menu: flexible, scrollable, wraps on small screens */
 #menu {
   position: fixed;
@@ -357,12 +346,12 @@ body, html {
 .zoom-container {
   position: absolute;
   top: 50%;
-  right: 80px;
+  right: 0px;
   transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 328px;
+  gap: 150px;
 }
 
 /* ------- Custom zoom slider (styled like other sliders) ------- */
@@ -382,8 +371,6 @@ body, html {
 
   /* prevent layout shift caused by rotation */
   transform-origin: center;
-
-  /* no need for writing-mode anymore */
 }
 
 /* Track */
@@ -412,7 +399,9 @@ body, html {
   border: 4px solid #000;
   margin-top: 0;    /* NO margin needed when using rotation */
   box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  transform: scale(1.2);
 }
+
 #zoom-slider::-moz-range-thumb {
   width: 36px;
   height: 36px;
@@ -423,27 +412,26 @@ body, html {
 }
 
 .zoom-btn {
-    width: 64px;
-    height: 64px;
-    font-size: 34px;
-    line-height: 1;
-    border-radius: 50%;
-    padding: 0;
-    background-color: #000;
-    color: #ffd700;
-    border: none;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-    transform: translateX(-15%)
+  width: 64px;
+  height: 64px;
+  font-size: 34px;
+  line-height: 1;
+  border-radius: 50%;
+  padding: 0;
+  background-color: #000;
+  color: #ffd700;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
 }
 
 .zoom-btn:hover {
-    transform: translateX(-15%) scale(1.05);
-    box-shadow: 0 6px 18px rgba(255,215,0,0.9);
+  transform: scale(1.15);
+  box-shadow: 0 6px 18px rgba(255,215,0,0.9);
 }
 
 #back-btn {

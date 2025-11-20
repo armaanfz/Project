@@ -296,9 +296,48 @@ function applyFilter(filter) {
     }
 })();
 
-// Example predefined filters
+function resetFilterSliders() {
+    // Default values (must match the defaults used when page first loads)
+    const defaultHue = 0;
+    const defaultBrightness = 100;
+    const defaultContrast = 100;
+    const defaultSaturation = 100;
+
+    // Update the DOM slider inputs if they exist
+    const hueEl = document.getElementById('hue');
+    const brightnessEl = document.getElementById('brightness');
+    const contrastEl = document.getElementById('contrast');
+    const saturationEl = document.getElementById('saturation');
+
+    if (hueEl) hueEl.value = defaultHue;
+    if (brightnessEl) brightnessEl.value = defaultBrightness;
+    if (contrastEl) contrastEl.value = defaultContrast;
+    if (saturationEl) saturationEl.value = defaultSaturation;
+
+    // Update the in-memory customFilters object so code uses the new values
+    if (typeof customFilters === 'object') {
+        customFilters.hue = defaultHue;
+        customFilters.brightness = defaultBrightness;
+        customFilters.contrast = defaultContrast;
+        customFilters.saturation = defaultSaturation;
+    }
+
+    // Apply the combined filters (this will apply 'none' for predefined filter and the adjusted sliders)
+    applyCombinedFilters();
+
+    // If you have any UI that depends on slider change events (labels, preview, etc.), optionally dispatch 'input' events:
+    [hueEl, brightnessEl, contrastEl, saturationEl].forEach(el => {
+        if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+}
+
+// Replace your applyNormal function with this (or update its body to call resetFilterSliders)
 function applyNormal() {
+    // Set predefined filter to 'none'
     applyFilter('none');
+
+    // Reset slider UI and values to defaults
+    resetFilterSliders();
 }
 
 function applyProtanopia() {

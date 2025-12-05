@@ -48,6 +48,12 @@
         <div id="controls">
             <button class="btn" id="filter-button" onclick="toggleMenu()">Filters</button>
             <button class="btn" id="reset-btn" onclick="resetZoom()" style="display: none;">Reset Zoom</button>
+            <button class="btn" id="mask-btn" aria-pressed="false" title="Toggle mask">Mask</button>
+            <div id="mask-controls" style="display:none;">
+                <label for="mask-radius" id="mask-radius-label" style="color:#fff; margin-right:8px;">Height</label>
+                <input type="range" id="mask-radius" min="0" max="475" value="100" />
+                <button class="btn" id="mask-shape-btn" title="Shape" style="display:none;">Shape</button>
+            </div>
         </div>
         
         <div class="zoom-container">

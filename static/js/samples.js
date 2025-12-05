@@ -443,3 +443,313 @@ document.addEventListener('DOMContentLoaded', () => {
 function goHome() {
     window.location.href = "/";
 }
+/* ---------- Robust letterbox mask (top + bottom bars) feature ----------
+   Drop this whole block into samples.js after videoElement / video-container are defined.
+   It will create missing UI if needed and ensures the mask canvas is inserted under UI.
+--------------------------------------------------------------------- */
+
+const _barsMaskState = {
+  enabled: false,
+  canvas: null,
+  ctx: null,
+  barHeight: 100,    // default px
+  resizeObserver: null
+};
+
+function _ensureMaskUIExists() {
+  // Ensure #controls exists
+  let controls = document.getElementById('controls');
+  const videoContainer = document.getElementById('video-container') || videoElement.parentElement;
+
+  // If no #controls, create one at bottom center of video-container
+  if (!controls && videoContainer) {
+    controls = document.createElement('div');
+    controls.id = 'controls';
+    controls.style.position = 'absolute';
+    controls.style.bottom = '10px';
+    controls.style.left = '50%';
+    controls.style.transform = 'translateX(-50%)';
+    controls.style.display = 'flex';
+    controls.style.gap = '10px';
+    videoContainer.appendChild(controls);
+  }
+
+  // Create mask button if missing
+  let maskBtn = document.getElementById('mask-btn');
+  if (!maskBtn && controls) {
+    maskBtn = document.createElement('button');
+    maskBtn.className = 'btn';
+    maskBtn.id = 'mask-btn';
+    maskBtn.type = 'button';
+    maskBtn.textContent = 'Mask';
+    maskBtn.setAttribute('aria-pressed', 'false');
+    controls.appendChild(maskBtn);
+  }
+
+  // Create mask-controls panel if missing
+  let maskControls = document.getElementById('mask-controls');
+  if (!maskControls && videoContainer) {
+    maskControls = document.createElement('div');
+    maskControls.id = 'mask-controls';
+    maskControls.style.display = 'none';
+    maskControls.style.position = 'absolute';
+    maskControls.style.bottom = '80px';
+    maskControls.style.left = '50%';
+    maskControls.style.transform = 'translateX(-50%)';
+    maskControls.style.zIndex = '600';
+    maskControls.style.padding = '8px 12px';
+    maskControls.style.background = 'rgba(0,0,0,0.56)';
+    maskControls.style.borderRadius = '10px';
+    maskControls.style.gap = '8px';
+    maskControls.style.display = 'flex';
+    videoContainer.appendChild(maskControls);
+  }
+
+  // Add label + input to mask-controls if missing
+  if (maskControls) {
+    if (!document.getElementById('mask-radius-label')) {
+      const label = document.createElement('label');
+      label.id = 'mask-radius-label';
+      label.htmlFor = 'mask-radius';
+      label.style.color = '#fff';
+      label.style.marginRight = '8px';
+      label.textContent = 'Bar height (px)';
+      maskControls.appendChild(label);
+    }
+    if (!document.getElementById('mask-radius')) {
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.id = 'mask-radius';
+      input.min = '0';
+      input.max = '500';
+      input.value = String(_barsMaskState.barHeight);
+      input.style.width = '280px';
+      input.addEventListener('input', (e) => {
+        _barsMaskState.barHeight = Math.round(Number(e.target.value) || 0);
+        drawBarsMask();
+      });
+      maskControls.appendChild(input);
+    }
+  }
+
+  // Hook button events if not hooked
+  maskBtn = document.getElementById('mask-btn');
+  if (maskBtn && !maskBtn._barsMaskHooked) {
+    maskBtn.addEventListener('click', () => toggleBarsMask());
+    maskBtn._barsMaskHooked = true;
+  }
+}
+
+// Robust createBarsMaskCanvas() that forces siblings to be above the mask.
+// Replace your previous version with this.
+function createBarsMaskCanvas() {
+  if (_barsMaskState.canvas) return;
+
+  const parent = document.getElementById('video-container') || videoElement.parentElement;
+  if (!parent) {
+    console.warn('createBarsMaskCanvas: parent container not found');
+    return;
+  }
+
+  // Ensure video is behind
+  try {
+    if (videoElement && videoElement.style) {
+      videoElement.style.setProperty('z-index', '0', 'important');
+      // ensure it's positioned so z-index takes effect
+      if (getComputedStyle(videoElement).position === 'static') {
+        videoElement.style.position = 'absolute';
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  // Create canvas and set basic styles
+  const canvas = document.createElement('canvas');
+  canvas.id = 'mask-overlay';
+  canvas.style.position = 'absolute';
+  canvas.style.left = '0px';
+  canvas.style.top = '0px';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.style.pointerEvents = 'none'; // don't block clicks
+
+  // Size pixel buffer to parent
+  const rect = parent.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(rect.width));
+  canvas.height = Math.max(1, Math.round(rect.height));
+
+  // Ensure parent is positioned so absolute canvas aligns correctly
+  if (getComputedStyle(parent).position === 'static') {
+    parent.style.position = 'relative';
+  }
+
+  // Insert canvas before known UI elements so the canvas is underneath them visually
+  const controlsEl = parent.querySelector('#controls') || parent.querySelector('.zoom-container') || parent.querySelector('#menu');
+  if (controlsEl) {
+    parent.insertBefore(canvas, controlsEl);
+  } else {
+    parent.insertBefore(canvas, parent.firstChild);
+  }
+
+  // Compute maximum z-index among sibling UI elements
+  let maxZ = -Infinity;
+  Array.from(parent.children).forEach((child) => {
+    if (child === canvas) return;
+    // ignore text nodes/comments (only elements)
+    if (!(child instanceof HTMLElement)) return;
+    const style = getComputedStyle(child);
+
+    // If child is the video element, skip (we want video behind)
+    if (child === videoElement) return;
+
+    // Some elements have 'auto' z-index (NaN), treat as 0
+    const z = parseInt(style.zIndex, 10);
+    const zVal = Number.isNaN(z) ? 0 : z;
+    maxZ = Math.max(maxZ, zVal);
+  });
+
+  // Decide canvas z-index: use maxZ (if finite) or default 1
+  let canvasZ;
+  if (maxZ === -Infinity) canvasZ = 1;
+  else canvasZ = Math.max(1, maxZ - 1);
+
+  // Defensive: if maxZ is very small (0), place canvas at 1
+  if (canvasZ < 1) canvasZ = 1;
+
+  // Apply z-index with !important to override stylesheet rules
+  canvas.style.setProperty('z-index', String(canvasZ), 'important');
+
+  // Now ensure every sibling UI element (except the video) has z-index >= canvasZ+1
+  const neededZ = canvasZ + 1;
+  Array.from(parent.children).forEach((child) => {
+    if (!(child instanceof HTMLElement)) return;
+    if (child === canvas || child === videoElement) return;
+
+    // Ensure positioned so z-index applies
+    const computed = getComputedStyle(child);
+    if (computed.position === 'static') {
+      child.style.setProperty('position', 'relative', 'important');
+    }
+
+    // Set z-index if it's less than neededZ or 'auto'
+    const currentZ = parseInt(computed.zIndex, 10);
+    const curr = Number.isNaN(currentZ) ? 0 : currentZ;
+    if (curr < neededZ) {
+      child.style.setProperty('z-index', String(neededZ), 'important');
+    }
+  });
+
+  // Save to state
+  _barsMaskState.canvas = canvas;
+  _barsMaskState.ctx = canvas.getContext('2d');
+
+  // Observe size changes on the parent so canvas can resize with layout changes
+  _barsMaskState.resizeObserver = new ResizeObserver(() => {
+    resizeBarsMaskCanvas();
+    drawBarsMask();
+  });
+  _barsMaskState.resizeObserver.observe(parent);
+
+  // Initial draw
+  drawBarsMask();
+}
+
+function resizeBarsMaskCanvas() {
+  if (!_barsMaskState.canvas) return;
+  const parent = document.getElementById('video-container') || videoElement.parentElement;
+  if (!parent) return;
+  const rect = parent.getBoundingClientRect();
+  // update canvas pixel buffer
+  _barsMaskState.canvas.width = Math.max(1, Math.round(rect.width));
+  _barsMaskState.canvas.height = Math.max(1, Math.round(rect.height));
+  _barsMaskState.canvas.style.width = `${rect.width}px`;
+  _barsMaskState.canvas.style.height = `${rect.height}px`;
+}
+
+function drawBarsMask() {
+  if (!_barsMaskState.canvas || !_barsMaskState.ctx) return;
+  const ctx = _barsMaskState.ctx;
+  const w = _barsMaskState.canvas.width;
+  const h = _barsMaskState.canvas.height;
+  const barH = Math.max(0, Math.min(h/2, Number(_barsMaskState.barHeight) || 0)); // clamp to half height
+
+  // Clear
+  ctx.clearRect(0,0,w,h);
+
+  // Draw top bar
+  ctx.fillStyle = 'rgba(0,0,0,1)';
+  ctx.fillRect(0, 0, w, Math.round(barH));
+
+  // Draw bottom bar
+  ctx.fillRect(0, Math.round(h - barH), w, Math.round(barH));
+
+  // subtle divider lines
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  if (barH > 0) {
+    ctx.fillRect(0, Math.round(barH) - 1, w, 1); // top divider
+    ctx.fillRect(0, Math.round(h - barH), w, 1); // bottom divider
+  }
+}
+
+function enableBarsMask() {
+  if (_barsMaskState.enabled) return;
+  _ensureMaskUIExists();
+  createBarsMaskCanvas();
+  _barsMaskState.enabled = true;
+  const controls = document.getElementById('mask-controls');
+  if (controls) controls.style.display = 'flex';
+  const btn = document.getElementById('mask-btn');
+  if (btn) btn.classList.add('active'), btn.setAttribute('aria-pressed','true');
+  drawBarsMask();
+}
+
+function disableBarsMask() {
+  if (!_barsMaskState.enabled) return;
+  if (_barsMaskState.canvas && _barsMaskState.canvas.parentElement) {
+    _barsMaskState.canvas.parentElement.removeChild(_barsMaskState.canvas);
+  }
+  if (_barsMaskState.resizeObserver) {
+    _barsMaskState.resizeObserver.disconnect();
+    _barsMaskState.resizeObserver = null;
+  }
+  _barsMaskState.canvas = null;
+  _barsMaskState.ctx = null;
+  _barsMaskState.enabled = false;
+  const controls = document.getElementById('mask-controls');
+  if (controls) controls.style.display = 'none';
+  const btn = document.getElementById('mask-btn');
+  if (btn) btn.classList.remove('active'), btn.setAttribute('aria-pressed','false');
+}
+
+function toggleBarsMask() {
+  if (_barsMaskState.enabled) disableBarsMask(); else enableBarsMask();
+}
+
+// Setup on DOM ready (safe to call multiple times)
+function setupBarsMaskFeature() {
+  try {
+    _ensureMaskUIExists();
+    // ensure slider event already wired by _ensureMaskUIExists, but double-check:
+    const radiusEl = document.getElementById('mask-radius');
+    if (radiusEl && !radiusEl._barsMaskHooked) {
+      radiusEl.addEventListener('input', (e) => {
+        _barsMaskState.barHeight = Math.round(Number(e.target.value) || 0);
+        drawBarsMask();
+      });
+      radiusEl._barsMaskHooked = true;
+    }
+    // ensure button wiring (idempotent)
+    const btn = document.getElementById('mask-btn');
+    if (btn && !btn._barsMaskHooked) {
+      btn.addEventListener('click', toggleBarsMask);
+      btn._barsMaskHooked = true;
+    }
+  } catch (err) {
+    console.warn('setupBarsMaskFeature error', err);
+  }
+}
+
+// initialize (call once)
+document.addEventListener('DOMContentLoaded', () => {
+  setupBarsMaskFeature();
+});
+/* ---------- end letterbox mask block ---------- */

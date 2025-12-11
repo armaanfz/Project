@@ -125,7 +125,7 @@ body, html {
     font-size: 28px !important;
     font-weight: bold;
     padding: 18px 28px;
-    min-width: 160px;
+    min-width: 80px;
     min-height: 80px;
     border-radius: 12px;
 
@@ -259,8 +259,8 @@ body, html {
   color: #fff;
   font-size: 30px;
   font-weight: 700;
-  min-width: 120px;
-  text-align: right;
+  min-width: 50px;
+  text-align: left;
 }
 
 /* slider */

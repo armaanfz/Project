@@ -670,23 +670,36 @@ function drawBarsMask() {
   const ctx = _barsMaskState.ctx;
   const w = _barsMaskState.canvas.width;
   const h = _barsMaskState.canvas.height;
-  const barH = Math.max(0, Math.min(h/2, Number(_barsMaskState.barHeight) || 0)); // clamp to half height
+
+  // _barsMaskState.barPct is percent (0..50). If code still uses barHeight (px), keep backward compat:
+  let pct = (typeof _barsMaskState.barPct === 'number') ? _barsMaskState.barPct : null;
+  if (pct === null) {
+    // backward compatibility: if barHeight exists, convert to percent relative to current height
+    const bh = Number(_barsMaskState.barHeight) || 0;
+    pct = Math.round((bh / Math.max(1, h)) * 100);
+    // clamp
+    pct = Math.max(0, Math.min(50, pct));
+    _barsMaskState.barPct = pct;
+  }
+
+  // Compute pixel bar height from percentage
+  const barH = Math.round((pct / 100) * h);
 
   // Clear
   ctx.clearRect(0,0,w,h);
 
-  // Draw top bar
-  ctx.fillStyle = 'rgba(0,0,0,1)';
-  ctx.fillRect(0, 0, w, Math.round(barH));
-
-  // Draw bottom bar
-  ctx.fillRect(0, Math.round(h - barH), w, Math.round(barH));
-
-  // subtle divider lines
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  // Draw top bar (solid black)
   if (barH > 0) {
-    ctx.fillRect(0, Math.round(barH) - 1, w, 1); // top divider
-    ctx.fillRect(0, Math.round(h - barH), w, 1); // bottom divider
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+    ctx.fillRect(0, 0, w, barH);
+
+    // Draw bottom bar
+    ctx.fillRect(0, h - barH, w, barH);
+
+    // subtle divider lines
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(0, barH - 1, w, 1); // top divider
+    ctx.fillRect(0, h - barH, w, 1); // bottom divider
   }
 }
 
@@ -730,18 +743,21 @@ function setupBarsMaskFeature() {
     _ensureMaskUIExists();
     // ensure slider event already wired by _ensureMaskUIExists, but double-check:
     const radiusEl = document.getElementById('mask-radius');
-    if (radiusEl && !radiusEl._barsMaskHooked) {
+    if (radiusEl) {
+      // ensure slider min/max are 0..50 (percent)
+      radiusEl.min = '0';
+      radiusEl.max = '50';
+      // default value (percent)
+      if (!radiusEl.value) radiusEl.value = String(_barsMaskState.barPct || 10);
+
+      // on input: store percentage and redraw
       radiusEl.addEventListener('input', (e) => {
-        _barsMaskState.barHeight = Math.round(Number(e.target.value) || 0);
+        const pct = Math.max(0, Math.min(50, Number(e.target.value) || 0));
+        _barsMaskState.barPct = pct;
+        // keep legacy numeric barHeight if other code reads it
+        _barsMaskState.barHeight = Math.round((pct / 100) * (_barsMaskState.canvas ? _barsMaskState.canvas.height : (videoElement ? videoElement.clientHeight : 0)));
         drawBarsMask();
       });
-      radiusEl._barsMaskHooked = true;
-    }
-    // ensure button wiring (idempotent)
-    const btn = document.getElementById('mask-btn');
-    if (btn && !btn._barsMaskHooked) {
-      btn.addEventListener('click', toggleBarsMask);
-      btn._barsMaskHooked = true;
     }
   } catch (err) {
     console.warn('setupBarsMaskFeature error', err);

@@ -137,7 +137,7 @@ body, html {
     transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 800px) {
   .filter-btn {
     /* Size and appearance (desktop) */
     font-size: 14px !important;
@@ -220,7 +220,7 @@ body, html {
     overflow: hidden; /* Prevent body scroll when menu is active */
 }
 
-@media (max-width: 768px) {
+@media (max-width: 800px) {
     #menu {
         width: 100%; /* Full-width menu on smaller screens */
         height: auto;
@@ -312,7 +312,7 @@ body, html {
   background: #3399ff;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 800px) {
   .custom-slider-col {
     /* Size and appearance (mobile) */
     gap: 3px;
@@ -583,7 +583,7 @@ body, html {
 }
 
 /* Small responsive adjustments */
-@media (max-width: 768px) {
+@media (max-width: 800px) {
   #mask-controls {
     bottom: 100px;
     left: 12px;

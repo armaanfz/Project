@@ -245,7 +245,7 @@ body, html {
   gap: 12px;
   flex: 1 1 24%;             /* try to fit 4 across (≈24% each) */
   min-width: 200px;
-  max-width: 400px;
+  max-width: 350px;
   box-sizing: border-box;
   border: 3px solid #666;       /* border color */
   border-radius: 12px;          /* rounded corners */

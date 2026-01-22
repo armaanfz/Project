@@ -56,7 +56,7 @@ body, html {
 
 .btn {
     padding: 15px 20px;
-    font-size: 18px;
+    font-size: 24px;
     border: none;
     border-radius: 8px;
     color: #ffd700;
@@ -113,42 +113,29 @@ body, html {
 
 /* Filter buttons: big on desktop, wrap and scale on smaller screens */
 .filter-btn {
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    white-space: normal;            /* allow wrapping to multiple lines */
-    word-wrap: break-word;
-    line-height: 1.1;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  white-space: normal;            /* allow wrapping to multiple lines */
+  word-wrap: break-word;
+  line-height: 1.1;
 
-    /* Size and appearance (desktop) */
-    font-size: 28px !important;
-    font-weight: bold;
-    padding: 18px 28px;
-    min-width: 80px;
-    min-height: 80px;
-    border-radius: 12px;
-    
-    background-color: #000;
-    color: #ffd700;
-    border: none;
-    cursor: pointer;
+  /* Size and appearance (desktop) */
+  font-size: 28px !important;
+  font-weight: bold;
+  padding: 9px 12px;
+  min-width: 80px;
+  min-height: 65px;
+  border-radius: 36px;
+  
+  background-color: #000;
+  color: #ffd700;
+  border: none;
+  cursor: pointer;
 
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-
-@media (max-width: 800px) {
-  .filter-btn {
-    /* Size and appearance (desktop) */
-    font-size: 14px !important;
-    font-weight: bold;
-    padding: 1px 1px;
-    min-width: 5px;
-    min-height: 10px;
-    border-radius: 18px;
-  }
-}
-
 
 /* Hover glow */
 .filter-btn:hover {
@@ -256,10 +243,10 @@ body, html {
   gap: 12px;
   flex: 1 1 24%;             /* try to fit 4 across (≈24% each) */
   min-width: 200px;
-  max-width: 350px;
+  max-width: 300px;
   box-sizing: border-box;
   border: 3px solid #666;       /* border color */
-  border-radius: 12px;          /* rounded corners */
+  border-radius: 36px;          /* rounded corners */
   padding: 12px 18px;           /* breathable spacing inside the box */
   background: rgba(0, 0, 0, 0.35); /* subtle dark background */
   box-shadow: 0 4px 12px rgba(0,0,0,0.4); /* soft shadow for depth */
@@ -268,9 +255,9 @@ body, html {
 /* label */
 .custom-slider-col label {
   color: #fff;
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 700;
-  min-width: 50px;
+  min-width: 25px;
   text-align: left;
 }
 
@@ -310,59 +297,6 @@ body, html {
 .custom-slider-col input[type="range"]::-moz-range-thumb:hover {
   transform: scale(1.2);
   background: #3399ff;
-}
-
-@media (max-width: 800px) {
-  .custom-slider-col {
-    /* Size and appearance (mobile) */
-    gap: 3px;
-    flex: 1 1 24%;             /* try to fit 4 across (≈24% each) */
-    min-width: 25px;
-    max-width: 200px;
-    box-sizing: border-box;
-    border: 3px solid #666;       /* border color */
-    border-radius: 96px;          /* rounded corners */
-    padding: 9px 12px;           /* breathable spacing inside the box */
-  }
-
-  .custom-slider-col label {
-    color: #fff;
-    font-size: 14px;
-    font-weight: 700;
-    min-width: 5px;
-    text-align: left;
-  }
-
-  .custom-slider-col input[type="range"] {
-    flex: 1;
-    cursor: pointer;
-    accent-color: #0078ff;
-    height: 10px;
-    border-radius: 5px;
-    -webkit-appearance: none;
-    appearance: none;
-    background: #444;
-  }
-  .custom-slider-col input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 15px; height: 15px; border-radius: 50%;
-    background: #0078ff; border: 2px solid #fff;
-  }
-
-  .custom-slider-col input[type="range"]::-webkit-slider-thumb:hover {
-    transform: scale(1.5);
-    background: #3399ff;
-  }
-
-  .custom-slider-col input[type="range"]::-moz-range-thumb {
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    background: #0078ff;
-    border: 2px solid #fff;
-    cursor: pointer;
-    transition: transform 0.2s ease, background 0.2s ease;
-  }
 }
 
 /* Predefined filters section apprearing at the top instead of the right side */

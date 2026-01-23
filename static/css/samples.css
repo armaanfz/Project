@@ -487,6 +487,7 @@ body, html {
   left: 50%;
   transform: translateX(-50%);
   z-index: 600;
+  font-size: 24px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -500,6 +501,7 @@ body, html {
 /* Make the slider look consistent with other sliders */
 #mask-controls input[type="range"] {
   accent-color: #ffd700;
+  height: 50px;
   width: 280px;               /* horizontal width of the slider control */
 }
 

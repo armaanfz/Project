@@ -15,6 +15,32 @@ const customFilters = {
     saturation: 100,
 };
 
+const orientationBtn = document.getElementById('mask-orientation-btn');
+if (orientationBtn) {
+  orientationBtn.addEventListener('click', () => {
+    // Toggle orientation
+    _barsMaskState.orientation =
+      _barsMaskState.orientation === 'horizontal'
+        ? 'vertical'
+        : 'horizontal';
+
+    // Update button label + redraw
+    updateMaskOrientationButton();
+    drawBarsMask();
+  });
+}
+
+function updateMaskOrientationButton() {
+  const btn = document.getElementById('mask-orientation-btn');
+  if (!btn) return;
+
+  // Button shows the NEXT orientation
+  btn.textContent =
+    _barsMaskState.orientation === 'horizontal'
+      ? 'Vertical'
+      : 'Horizontal';
+}
+
 // Default filter (none)
 let currentFilter = 'none';
 
@@ -452,7 +478,14 @@ const _barsMaskState = {
   enabled: false,
   canvas: null,
   ctx: null,
-  barHeight: 100,    // default px
+
+  // percentage of dimension (0–50)
+  barPct: 5,
+
+  // orientation: 'horizontal' = top/bottom, 'vertical' = left/right
+  orientation: 'horizontal',
+  inverted: false,
+
   resizeObserver: null
 };
 
@@ -667,39 +700,42 @@ function resizeBarsMaskCanvas() {
 
 function drawBarsMask() {
   if (!_barsMaskState.canvas || !_barsMaskState.ctx) return;
+
   const ctx = _barsMaskState.ctx;
   const w = _barsMaskState.canvas.width;
   const h = _barsMaskState.canvas.height;
 
-  // _barsMaskState.barPct is percent (0..50). If code still uses barHeight (px), keep backward compat:
-  let pct = (typeof _barsMaskState.barPct === 'number') ? _barsMaskState.barPct : null;
-  if (pct === null) {
-    // backward compatibility: if barHeight exists, convert to percent relative to current height
-    const bh = Number(_barsMaskState.barHeight) || 0;
-    pct = Math.round((bh / Math.max(1, h)) * 100);
-    // clamp
-    pct = Math.max(0, Math.min(50, pct));
-    _barsMaskState.barPct = pct;
-  }
+  const pct = Math.max(0, Math.min(50, Number(_barsMaskState.barPct) || 0));
 
-  // Compute pixel bar height from percentage
-  const barH = Math.round((pct / 100) * h);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(0,0,0,1)';
 
-  // Clear
-  ctx.clearRect(0,0,w,h);
-
-  // Draw top bar (solid black)
-  if (barH > 0) {
-    ctx.fillStyle = 'rgba(0,0,0,1)';
-    ctx.fillRect(0, 0, w, barH);
-
-    // Draw bottom bar
-    ctx.fillRect(0, h - barH, w, barH);
-
-    // subtle divider lines
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    ctx.fillRect(0, barH - 1, w, 1); // top divider
-    ctx.fillRect(0, h - barH, w, 1); // bottom divider
+  if (!_barsMaskState.inverted) {
+    // NORMAL: mask edges
+    if (_barsMaskState.orientation === 'horizontal') {
+      const barH = Math.round((pct / 100) * h);
+      if (barH > 0) {
+        ctx.fillRect(0, 0, w, barH);           // top
+        ctx.fillRect(0, h - barH, w, barH);   // bottom
+      }
+    } else {
+      const barW = Math.round((pct / 100) * w);
+      if (barW > 0) {
+        ctx.fillRect(0, 0, barW, h);           // left
+        ctx.fillRect(w - barW, 0, barW, h);    // right
+      }
+    }
+  } else {
+    // INVERTED: mask center
+    if (_barsMaskState.orientation === 'horizontal') {
+      const centerH = Math.round((pct * 2 / 100) * h);
+      const y = Math.round((h - centerH) / 2);
+      if (centerH > 0) ctx.fillRect(0, y, w, centerH);
+    } else {
+      const centerW = Math.round((pct * 2 / 100) * w);
+      const x = Math.round((w - centerW) / 2);
+      if (centerW > 0) ctx.fillRect(x, 0, centerW, h);
+    }
   }
 }
 
@@ -713,6 +749,8 @@ function enableBarsMask() {
   const btn = document.getElementById('mask-btn');
   if (btn) btn.classList.add('active'), btn.setAttribute('aria-pressed','true');
   drawBarsMask();
+  updateMaskOrientationButton();
+  updateMaskInvertButton();
 }
 
 function disableBarsMask() {
@@ -737,6 +775,13 @@ function toggleBarsMask() {
   if (_barsMaskState.enabled) disableBarsMask(); else enableBarsMask();
 }
 
+function updateMaskInvertButton() {
+  const btn = document.getElementById('mask-invert-btn');
+  if (!btn) return;
+
+  btn.textContent = _barsMaskState.inverted ? 'Normal' : 'Invert';
+}
+
 // Setup on DOM ready (safe to call multiple times)
 function setupBarsMaskFeature() {
   try {
@@ -744,24 +789,27 @@ function setupBarsMaskFeature() {
     // ensure slider event already wired by _ensureMaskUIExists, but double-check:
     const radiusEl = document.getElementById('mask-radius');
     if (radiusEl) {
-      // ensure slider min/max are 0..50 (percent)
       radiusEl.min = '0';
-      radiusEl.max = '50';
-      // default value (percent)
-      if (!radiusEl.value) radiusEl.value = String(_barsMaskState.barPct || 10);
+      radiusEl.max = '48';
+      radiusEl.value = String(_barsMaskState.barPct || 5);
 
-      // on input: store percentage and redraw
       radiusEl.addEventListener('input', (e) => {
-        const pct = Math.max(0, Math.min(50, Number(e.target.value) || 0));
-        _barsMaskState.barPct = pct;
-        // keep legacy numeric barHeight if other code reads it
-        _barsMaskState.barHeight = Math.round((pct / 100) * (_barsMaskState.canvas ? _barsMaskState.canvas.height : (videoElement ? videoElement.clientHeight : 0)));
+        _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
         drawBarsMask();
       });
     }
   } catch (err) {
     console.warn('setupBarsMaskFeature error', err);
   }
+}
+
+const invertBtn = document.getElementById('mask-invert-btn');
+if (invertBtn) {
+  invertBtn.addEventListener('click', () => {
+    _barsMaskState.inverted = !_barsMaskState.inverted;
+    updateMaskInvertButton();
+    drawBarsMask();
+  });
 }
 
 // initialize (call once)

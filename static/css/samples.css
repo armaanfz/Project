@@ -498,11 +498,83 @@ body, html {
   box-shadow: 0 6px 18px rgba(0,0,0,0.6);
 }
 
-/* Make the slider look consistent with other sliders */
 #mask-controls input[type="range"] {
-  accent-color: #ffd700;
-  height: 50px;
-  width: 280px;               /* horizontal width of the slider control */
+  height: 0px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* WebKit browsers (Chrome, Edge, Safari) */
+#mask-controls input[type="range"]::-webkit-slider-runnable-track {
+  height: 28px;           /* THIS controls bar thickness */
+  background: #444;
+  border-radius: 14px;
+  border: 3px solid #222;
+}
+
+/* Firefox */
+#mask-controls input[type="range"]::-moz-range-track {
+  height: 28px;
+  background: #444;
+  border-radius: 14px;
+  border: 3px solid #222;
+}
+
+/* Thumb — scale it to match thicker bar */
+#mask-controls input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+
+  width: 30px;               /* BIGGER thumb */
+  height: 30px;
+  border-radius: 50%;
+
+  background-color: #ffd700 !important; /* solid gold */
+  border: 4px solid #000;                /* thick black border */
+
+  margin-top: -4px;          /* centers on thick track */
+
+  box-shadow:
+    0 0 0 4px rgba(255, 215, 0, 0.35),
+    0 6px 14px rgba(0,0,0,0.7);
+
+  cursor: pointer;
+}
+
+/* Hover state */
+#mask-controls input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+/* Active (dragging) state */
+#mask-controls input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+
+/* Firefox */
+#mask-controls input[type="range"]::-moz-range-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+
+  background-color: #ffd700 !important;
+  border: 4px solid #000;
+
+  box-shadow:
+    0 0 0 4px rgba(255, 215, 0, 0.35),
+    0 6px 14px rgba(0,0,0,0.7);
+
+  cursor: pointer;
+}
+
+/* Kill Firefox inner focus / purple fill */
+#mask-controls input[type="range"]::-moz-focus-inner {
+  border: 0;
+}
+
+/* Kill Firefox focus ring */
+#mask-controls input[type="range"]:focus {
+  outline: none;
 }
 
 /* Mask button active state */
@@ -516,18 +588,4 @@ body, html {
 /* Hide the optional shape button by default (not used for letterbox) */
 #mask-shape-btn {
   display: none !important;
-}
-
-/* Small responsive adjustments */
-@media (max-width: 800px) {
-  #mask-controls {
-    bottom: 100px;
-    left: 12px;
-    transform: none;
-    width: calc(100% - 24px);
-    justify-content: space-between;
-  }
-  #mask-controls input[type="range"] {
-    width: calc(100% - 140px);
-  }
 }

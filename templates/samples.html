@@ -40,12 +40,12 @@
             </filter>
         </defs>
     </svg>
-
     <button class="btn" id="back-btn" onclick="goHome()">⟵ Back</button>
     <div id="video-container">
         <video id="video" src="" autoplay playsinline muted></video>
         
         <div id="controls">
+            <button class="btn" id="tutorial-btn">Tutorial</button>
             <button class="btn" id="filter-button" onclick="toggleMenu()">Filters</button>
             <button class="btn" id="reset-btn" onclick="resetZoom()" style="display: none;">Reset Zoom</button>
             <button class="btn" id="mask-btn" aria-pressed="false" title="Toggle mask">Mask</button>
@@ -109,7 +109,6 @@
             </div>
         </div>
     </div>
-
     <!-- load samples js from Flask static/ -->
     <script defer src="{{ url_for('static', filename='js/samples.js') }}"></script>
 </body>

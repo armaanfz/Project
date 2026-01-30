@@ -815,5 +815,196 @@ if (invertBtn) {
 // initialize (call once)
 document.addEventListener('DOMContentLoaded', () => {
   setupBarsMaskFeature();
+
+  let overlay, box, textEl, highlight;
+  let stepIndex = 0;
+
+  const steps = [
+    {
+      text: "Welcome! This tutorial will show you how to use the tools.",
+      target: null
+    },
+    {
+      text: "This is the camera view. Point it at something you want to see.",
+      target: "#video-container"
+    },
+    {
+      text: "Use these controls to zoom in and out.",
+      target: ".zoom-container"
+    },
+    {
+      text: "This is the Filters menu. It changes how colors look.",
+      target: "#menu",
+      before: () => document.getElementById("menu")?.classList.add("active")
+    },
+    {
+      text: "These sliders adjust brightness and contrast.",
+      target: ".custom-slider-col",
+      before: () => {
+        // Ensure filters menu is open
+        document.getElementById("menu")?.classList.add("active");
+
+        // Highlight ALL filter sliders together
+        requestAnimationFrame(() => {
+          highlightMultiple([".custom-slider-col"]);
+        });
+      }
+    },
+    {
+      text: "This is the Mask button. It hides parts of the screen.",
+      target: "#mask-btn",
+      before: () => {
+        // Enable masking if not already enabled
+        if (typeof enableBarsMask === "function") {
+          enableBarsMask();
+        } else if (typeof toggleBarsMask === "function") {
+          toggleBarsMask();
+        }
+      } 
+    },
+    {
+      text: "This slider controls how much is hidden.",
+      target: "#mask-controls",
+      before: () => {
+        // Ensure mask is enabled before showing controls
+        if (typeof enableBarsMask === "function") {
+          enableBarsMask();
+        } else if (typeof toggleBarsMask === "function") {
+          toggleBarsMask();
+        }
+      }
+    },
+    {
+      text: "You're all set! You can explore anytime.",
+      target: null
+    }
+  ];
+
+  function createTutorial() {
+    // overlay
+    overlay = document.createElement("div");
+    overlay.className = "tutorial-overlay";
+
+    // box
+    box = document.createElement("div");
+    box.className = "tutorial-box";
+
+    textEl = document.createElement("div");
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "tutorial-buttons";
+
+    const backBtn = document.createElement("button");
+    backBtn.className = "btn";
+    backBtn.textContent = "Back";
+
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "btn";
+    nextBtn.textContent = "Next";
+
+    const skipBtn = document.createElement("button");
+    skipBtn.className = "btn";
+    skipBtn.textContent = "Skip";
+
+    btnRow.append(backBtn, nextBtn, skipBtn);
+    box.append(textEl, btnRow);
+    overlay.append(box);
+    document.body.append(overlay);
+
+    // highlight
+    highlight = document.createElement("div");
+    highlight.className = "tutorial-highlight";
+    highlight.style.display = "none";
+    document.body.append(highlight);
+
+    backBtn.onclick = () => {
+      if (stepIndex > 0) stepIndex--;
+      renderStep();
+    };
+
+    nextBtn.onclick = () => {
+      if (stepIndex < steps.length - 1) {
+        stepIndex++;
+        renderStep();
+      } else {
+        endTutorial();
+      }
+    };
+
+    skipBtn.onclick = endTutorial;
+
+    renderStep();
+  }
+
+  function highlightMultiple(selectors) {
+    const highlight = document.querySelector(".tutorial-highlight");
+    if (!highlight) return;
+
+    const elements = selectors
+      .map(sel => Array.from(document.querySelectorAll(sel)))
+      .flat()
+      .filter(el => el && el.getBoundingClientRect);
+
+    if (elements.length === 0) {
+      highlight.style.display = "none";
+      return;
+    }
+
+    // Compute combined bounding box
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+
+    elements.forEach(el => {
+      const r = el.getBoundingClientRect();
+      left = Math.min(left, r.left);
+      top = Math.min(top, r.top);
+      right = Math.max(right, r.right);
+      bottom = Math.max(bottom, r.bottom);
+    });
+
+    highlight.style.display = "block";
+    highlight.style.left = `${left - 12}px`;
+    highlight.style.top = `${top - 12}px`;
+    highlight.style.width = `${right - left + 24}px`;
+    highlight.style.height = `${bottom - top + 24}px`;
+  }
+
+  function renderStep() {
+    const step = steps[stepIndex];
+    textEl.textContent = step.text;
+
+    if (typeof step.before === "function") {
+      step.before();
+    }
+
+    if (!step.target) {
+      highlight.style.display = "none";
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const el = document.querySelector(step.target);
+      if (!el) {
+        highlight.style.display = "none";
+        return;
+      }
+
+      const r = el.getBoundingClientRect();
+      highlight.style.display = "block";
+      highlight.style.left = `${r.left - 12}px`;
+      highlight.style.top = `${r.top - 12}px`;
+      highlight.style.width = `${r.width + 24}px`;
+      highlight.style.height = `${r.height + 24}px`;
+    });
+  }
+
+  function endTutorial() {
+    overlay?.remove();
+    highlight?.remove();
+    overlay = box = textEl = highlight = null;
+    stepIndex = 0;
+  }
+
+  document.getElementById("tutorial-btn")?.addEventListener("click", () => {
+    if (!overlay) createTutorial();
+  });
 });
-/* ---------- end letterbox mask block ---------- */

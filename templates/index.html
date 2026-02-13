@@ -18,9 +18,16 @@
     </div>
 </nav>
 
-<main class="content-panel" id="info-box" aria-live="polite"></main>
+<div class="page-layout">
+    <main class="content-panel" id="info-box" aria-live="polite"></main>
 
-<button id="next-btn" onclick="window.location.href='{{ url_for('samples') }}'">Start Samples</button>
+    <aside class="quick-start" aria-label="Quick start">
+        <h2>Ready to Read?</h2>
+        <p>When you are ready, go to Samples and start using the reading tools.</p>
+        <button class="start-btn" onclick="window.location.href='{{ url_for('samples') }}'">Start Samples</button>
+        <p class="tip">Tip: You can always come back to Home if you need help.</p>
+    </aside>
+</div>
 
 <script defer src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>

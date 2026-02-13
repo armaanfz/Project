@@ -11,72 +11,15 @@
     <div class="container">
         <h1>MAGNIFIER</h1>
         <ul>
-            <li><a href="#" onclick="showInfo('home')">Home</a></li>
-            <li><a href="#" onclick="showInfo('team')">Team</a></li>
-            <li><a href="#" onclick="showInfo('collaboration')">Collaboration</a></li>
-            <li><a href="#" onclick="showInfo('about')">About</a></li>
-            <li><a href="#" onclick="showInfo('media')">Media</a></li>
+            <li><a href="#" onclick="showInfo('home'); return false;">Home</a></li>
+            <li><a href="#" onclick="showInfo('team'); return false;">Team</a></li>
+            <li><a href="#" onclick="showInfo('about'); return false;">About</a></li>
         </ul>
     </div>
 </nav>
 
-<main class="manual" aria-label="Website manual">
-    <h2>How to Use This Website</h2>
-    <p class="manual-subtitle">A quick and easy guide for students</p>
+<main class="content-panel" id="info-box" aria-live="polite"></main>
 
-    <section>
-        <h3>Welcome!</h3>
-        <p>
-            This website helps you read books and pages more clearly.
-            Follow the steps below one at a time. There is no rush.
-        </p>
-    </section>
-
-    <section>
-        <h3>Step 1: Go to the Samples Page</h3>
-        <ul>
-            <li>Click the big <strong>Start Samples</strong> button at the bottom-right corner.</li>
-            <li>You will go to the samples page where you can begin using the tools.</li>
-        </ul>
-    </section>
-
-    <section>
-        <h3>Step 2: Place your page under the camera</h3>
-        <ul>
-            <li>Put your book or worksheet where the camera can see it.</li>
-            <li>Make sure the text is not too dark or too blurry.</li>
-        </ul>
-    </section>
-
-    <section>
-        <h3>Step 3: Use the tools</h3>
-        <ul>
-            <li><strong>Zoom In / Zoom Out:</strong> Make letters bigger or smaller.</li>
-            <li><strong>Color Filters:</strong> Try different color modes to find what feels best for your eyes.</li>
-            <li><strong>Toggle Screen:</strong> Make the reading area bigger on your screen.</li>
-        </ul>
-    </section>
-
-    <section>
-        <h3>Step 4: Find your best view</h3>
-        <ul>
-            <li>Try one tool at a time.</li>
-            <li>Keep the settings that make reading easiest for you.</li>
-            <li>If something looks wrong, go back and adjust again.</li>
-        </ul>
-    </section>
-
-    <section>
-        <h3>Helpful Tips</h3>
-        <ul>
-            <li>Move slowly when changing settings.</li>
-            <li>If you feel stuck, ask a teacher, parent, or helper.</li>
-            <li>Take short breaks if your eyes feel tired.</li>
-        </ul>
-    </section>
-</main>
-
-<div class="info-box" id="info-box"></div>
 <button id="next-btn" onclick="window.location.href='{{ url_for('samples') }}'">Start Samples</button>
 
 <script defer src="{{ url_for('static', filename='js/script.js') }}"></script>

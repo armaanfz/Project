@@ -4,8 +4,9 @@ body {
     padding: 0;
     background-image: url('magnifier.png');
     background-size: cover;
-    background-position: center 7%;
+    background-position: center;
     min-height: 100vh;
+    color: #1b1b1b;
 }
 
 nav {
@@ -41,57 +42,43 @@ nav ul li {
 nav ul li a {
     color: white;
     text-decoration: none;
+    font-weight: 600;
 }
 
-.manual {
+.content-panel {
     width: min(900px, 90%);
-    margin: 24px auto 120px;
-    background: rgba(255, 255, 255, 0.95);
+    margin: 28px auto 120px;
+    background: rgba(255, 255, 255, 0.96);
     border: 2px solid #333;
     border-radius: 12px;
     padding: 24px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
     line-height: 1.6;
 }
 
-.manual h2 {
+.content-panel h2 {
     margin: 0;
     color: #0b4f8a;
     font-size: 34px;
 }
 
-.manual-subtitle {
+.section-subtitle {
     margin-top: 8px;
     font-size: 18px;
 }
 
-.manual h3 {
+.content-panel h3 {
     color: #0b4f8a;
     margin-bottom: 8px;
 }
 
-.manual section {
+.content-panel section {
     margin-bottom: 18px;
 }
 
-.manual ul {
+.content-panel ul {
     margin-top: 8px;
     padding-left: 22px;
-}
-
-.info-box {
-    display: none;
-    width: min(900px, 90%);
-    height: 450px;
-    background-color: lightgray;
-    position: fixed;
-    top: 55%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    padding: 20px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    border: 2px solid black;
-    overflow-y: auto;
 }
 
 #next-btn {
@@ -110,22 +97,4 @@ nav ul li a {
 
 #next-btn:hover {
     background-color: #083a65;
-}
-
-.team-container {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    height: 100%;
-    padding: 20px;
-    box-sizing: border-box;
-}
-
-.team-column {
-    width: 45%;
-    overflow-y: auto;
-}
-
-.team-column h2 {
-    margin-top: 0;
 }

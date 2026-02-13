@@ -2,8 +2,11 @@ body {
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background: #0a0a0a;
-    color: #ffd700;
+    background-image: linear-gradient(rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.86)), url('magnifier.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    color: #ffffff;
     min-height: 100vh;
 }
 
@@ -40,13 +43,14 @@ nav ul li {
 }
 
 nav ul li a {
-    color: #ffd700;
+    color: #ffffff;
     text-decoration: none;
     font-weight: 700;
     font-size: 18px;
 }
 
 nav ul li a:hover {
+    color: #ffd700;
     text-shadow: 0 0 8px rgba(255, 215, 0, 0.8);
 }
 
@@ -61,10 +65,11 @@ nav ul li a:hover {
 
 .content-panel,
 .quick-start {
-    background: #111;
+    background: rgba(17, 17, 17, 0.92);
     border: 2px solid #ffd700;
     border-radius: 12px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    color: #ffffff;
 }
 
 .content-panel {
@@ -90,7 +95,7 @@ nav ul li a:hover {
 .section-subtitle {
     margin-top: 4px;
     font-size: 18px;
-    color: #ffe870;
+    color: #ffffff;
 }
 
 .content-panel h3 {
@@ -122,11 +127,12 @@ nav ul li a:hover {
 
 .start-btn:hover {
     box-shadow: 0 0 14px rgba(255, 215, 0, 0.8);
+    transform: translateY(-1px);
 }
 
 .tip {
     font-size: 15px;
-    color: #ffe870;
+    color: #ffffff;
 }
 
 @media (max-width: 980px) {

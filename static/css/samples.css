@@ -6,12 +6,9 @@ body, html {
     height: 100%;
     background-color: #111;
     color: #fff;
+    overflow: hidden;
 }
 
-#menu {
-    overflow: auto;
-    max-height: 100vh;
-}
 
 .video-container {
     overflow: hidden;
@@ -176,36 +173,6 @@ body, html {
     border-radius: 5px; /* Rounded track */
 }
 
-/* Responsive filter menu: flexible, scrollable, wraps on small screens */
-#menu {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  height: auto;
-  background-color: rgba(0, 0, 0, 0.9);
-  display: none;
-  padding: 10px 20px;
-  z-index: 999;
-  overflow-x: hidden;      /* disable horizontal scroll */
-  overflow-y: auto;        /* enable vertical scroll for small screens */
-  -webkit-overflow-scrolling: touch;
-  box-sizing: border-box;
-  white-space: normal;     /* allow wrapping */
-}
-
-/* active state */
-#menu.active {
-  display: flex;
-  flex-direction: column;   /* column on small devices by default */
-  align-items: stretch;
-  gap: 12px;
-}
-
-body, html {
-    overflow: hidden; /* Prevent body scroll when menu is active */
-}
 
 @media (max-width: 800px) {
     #menu {

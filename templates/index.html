@@ -11,9 +11,9 @@
     <div class="container">
         <h1>MAGNIFIER</h1>
         <ul>
-            <li><a href="#" onclick="showInfo('home'); return false;">Home</a></li>
-            <li><a href="#" onclick="showInfo('team'); return false;">Team</a></li>
-            <li><a href="#" onclick="showInfo('about'); return false;">About</a></li>
+            <li><a href="#" data-tab="home">Home</a></li>
+            <li><a href="#" data-tab="team">Team</a></li>
+            <li><a href="#" data-tab="about">About</a></li>
         </ul>
     </div>
 </nav>
@@ -24,7 +24,7 @@
     <aside class="quick-start" aria-label="Quick start">
         <h2>Ready to Read?</h2>
         <p>When you are ready, go to Samples and start using the reading tools.</p>
-        <button class="start-btn" onclick="window.location.href='{{ url_for('samples') }}'">Start Samples</button>
+        <button class="start-btn" id="start-samples-btn" data-samples-url="{{ url_for('samples') }}">Start Samples</button>
         <p class="tip">Tip: You can always come back to Home if you need help.</p>
     </aside>
 </div>

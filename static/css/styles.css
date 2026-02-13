@@ -2,9 +2,10 @@ body {
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-image: url('magnifier.png'); /* Specify the local path */
-    background-size: cover; /* Cover the entire background */
-    background-position: center 7%; /* Center horizontally, 7% from the top */
+    background-image: url('magnifier.png');
+    background-size: cover;
+    background-position: center 7%;
+    min-height: 100vh;
 }
 
 nav {
@@ -27,15 +28,6 @@ h1 {
     font-size: 36px;
 }
 
-h2 {
-    font-size: 36px;
-    color: azure;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
 nav ul {
     list-style-type: none;
     padding: 0;
@@ -51,9 +43,45 @@ nav ul li a {
     text-decoration: none;
 }
 
+.manual {
+    width: min(900px, 90%);
+    margin: 24px auto 120px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    line-height: 1.6;
+}
+
+.manual h2 {
+    margin: 0;
+    color: #0b4f8a;
+    font-size: 34px;
+}
+
+.manual-subtitle {
+    margin-top: 8px;
+    font-size: 18px;
+}
+
+.manual h3 {
+    color: #0b4f8a;
+    margin-bottom: 8px;
+}
+
+.manual section {
+    margin-bottom: 18px;
+}
+
+.manual ul {
+    margin-top: 8px;
+    padding-left: 22px;
+}
+
 .info-box {
     display: none;
-    width: 900px;
+    width: min(900px, 90%);
     height: 450px;
     background-color: lightgray;
     position: fixed;
@@ -63,23 +91,27 @@ nav ul li a {
     padding: 20px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     border: 2px solid black;
-    overflow-y: auto; /* Add scroll feature */
+    overflow-y: auto;
 }
 
 #next-btn {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    padding: 10px 20px;
-    font-size: 16px;
+    padding: 16px 30px;
+    font-size: 24px;
+    font-weight: bold;
     cursor: pointer;
-    background-color: #333;
+    background-color: #0b4f8a;
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 10px;
 }
 
-/* Team Container Specific Styles */
+#next-btn:hover {
+    background-color: #083a65;
+}
+
 .team-container {
     display: flex;
     justify-content: space-between;
@@ -91,10 +123,9 @@ nav ul li a {
 
 .team-column {
     width: 45%;
-    overflow-y: auto; /* Add scroll feature */
+    overflow-y: auto;
 }
 
 .team-column h2 {
     margin-top: 0;
 }
-

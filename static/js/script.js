@@ -78,7 +78,3 @@ function showInfo(infoType) {
     }
 }
 
-function openIntroduction() {
-    window.open("introduction.html", "_self");
-}
-

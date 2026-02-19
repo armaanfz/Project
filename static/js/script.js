@@ -1,56 +1,5 @@
 const pageContent = {
-    home: `
-        <h2>How to Use This Website</h2>
-        <p class="section-subtitle">A quick and easy guide for students</p>
-
-        <section>
-            <h3>Welcome!</h3>
-            <p>This website helps you read books and pages more clearly. Follow the steps below one at a time. There is no rush.</p>
-        </section>
-
-        <section>
-            <h3>Step 1: Go to the Samples Page</h3>
-            <ul>
-                <li>Click the big <strong>Start Samples</strong> button to begin.</li>
-                <li>You will go to the samples page where you can start using the tools.</li>
-            </ul>
-        </section>
-
-        <section>
-            <h3>Step 2: Place your page under the camera</h3>
-            <ul>
-                <li>Put your book or worksheet where the camera can see it.</li>
-                <li>Make sure the text is not too dark or too blurry.</li>
-            </ul>
-        </section>
-
-        <section>
-            <h3>Step 3: Use the tools</h3>
-            <ul>
-                <li><strong>Zoom In / Zoom Out:</strong> Make letters bigger or smaller.</li>
-                <li><strong>Color Filters:</strong> Try different color modes to find what feels best for your eyes.</li>
-                <li><strong>Toggle Screen:</strong> Make the reading area bigger on your screen.</li>
-            </ul>
-        </section>
-
-        <section>
-            <h3>Step 4: Find your best view</h3>
-            <ul>
-                <li>Try one tool at a time.</li>
-                <li>Keep the settings that make reading easiest for you.</li>
-                <li>If something looks wrong, go back and adjust again.</li>
-            </ul>
-        </section>
-
-        <section>
-            <h3>Helpful Tips</h3>
-            <ul>
-                <li>Move slowly when changing settings.</li>
-                <li>If you feel stuck, ask a teacher, parent, or helper.</li>
-                <li>Take short breaks if your eyes feel tired.</li>
-            </ul>
-        </section>
-    `,
+    home: "",
     team: `
         <h2>Team</h2>
         <p class="section-subtitle">The people building this project together</p>
@@ -114,16 +63,57 @@ const pageContent = {
     `
 };
 
-function showInfo(infoType) {
+let homeContentCache = "";
+
+async function loadHomeContent() {
+    if (homeContentCache) {
+        return homeContentCache;
+    }
+
+    const response = await fetch(`/introduction?_=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) {
+        throw new Error(`Failed to load introduction content: ${response.status}`);
+    }
+
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const title = doc.querySelector("header.container h1")?.textContent?.trim() || "";
+    const subtitle = doc.querySelector("header.container .subtitle")?.textContent?.trim() || "";
+    const introBody = doc.querySelector("main.introduction")?.innerHTML || "";
+
+    if (!introBody) {
+        throw new Error("Introduction content not found in response.");
+    }
+
+    homeContentCache = `
+        ${title ? `<h2>${title}</h2>` : ""}
+        ${subtitle ? `<p class="section-subtitle">${subtitle}</p>` : ""}
+        ${introBody}
+    `;
+    return homeContentCache;
+}
+
+async function showInfo(infoType) {
     const infoBox = document.getElementById('info-box');
+
+    if (infoType === "home") {
+        try {
+            infoBox.innerHTML = await loadHomeContent();
+        } catch (error) {
+            console.error(error);
+            infoBox.innerHTML = "<h2>Home</h2><p>Unable to load introduction content.</p>";
+        }
+        return;
+    }
+
     infoBox.innerHTML = pageContent[infoType] || '<h2>Info</h2><p>No information available.</p>';
 }
 
 window.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('a[data-tab]').forEach((tabLink) => {
-        tabLink.addEventListener('click', (event) => {
+        tabLink.addEventListener('click', async (event) => {
             event.preventDefault();
-            showInfo(tabLink.dataset.tab);
+            await showInfo(tabLink.dataset.tab);
         });
     });
 
@@ -134,5 +124,5 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    showInfo('home');
+    void showInfo('home');
 });

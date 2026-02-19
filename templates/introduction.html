@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Use This Website</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/introduction.css') }}">
+</head>
+<body>
+    <header class="container">
+        <h1>How to Use This Website</h1>
+        <p class="subtitle">A quick and easy guide for students</p>
+    </header>
+
+    <main class="introduction" aria-label="Website manual">
+        <section>
+            <h2>Welcome!</h2>
+            <p>
+                This website helps you read books and pages more clearly.
+                Follow the steps below one at a time. There is no rush.
+            </p>
+        </section>
+
+        <section>
+            <h2>Step 1: Start on the Samples Page</h2>
+            <ul>
+                <li>Click the <strong>Next</strong> button at the bottom-right corner.</li>
+                <li>You will go to the samples page where you can begin using the tools.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Step 2: Place your page under the camera</h2>
+            <ul>
+                <li>Put your book or worksheet where the camera can see it.</li>
+                <li>Make sure the text is not too dark or too blurry.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Step 3: Use the tools</h2>
+            <ul>
+                <li><strong>Zoom In / Zoom Out:</strong> Make letters bigger or smaller.</li>
+                <li><strong>Color Filters:</strong> Try different color modes to find what feels best for your eyes.</li>
+                <li><strong>Toggle Screen:</strong> Make the reading area bigger on your screen.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Step 4: Find your best view</h2>
+            <ul>
+                <li>Try one tool at a time.</li>
+                <li>Keep the settings that make reading easiest for you.</li>
+                <li>If something looks wrong, go back and adjust again.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Helpful Tips</h2>
+            <ul>
+                <li>Move slowly when changing settings.</li>
+                <li>If you feel stuck, ask a teacher, parent, or helper.</li>
+                <li>Take short breaks if your eyes feel tired.</li>
+            </ul>
+        </section>
+    </main>
+
+    <button id="next-btn" onclick="window.location.href='{{ url_for('samples') }}'">Next</button>
+
+    <script defer src="{{ url_for('static', filename='js/introduction.js') }}"></script>
+</body>
+</html>

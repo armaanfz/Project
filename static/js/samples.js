@@ -6,6 +6,7 @@ const zoomSlider = document.getElementById('zoom-slider');
 let scale = 1; // scale
 let translateX = 0; // X-axis translation
 let translateY = 0; // Y-axis translation
+const CENTER_TOLERANCE_PX = 1;
 
 // Default values for custom filters
 const customFilters = {
@@ -214,10 +215,30 @@ function constrainMovement() {
     translateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, translateY));
 }
 
+function isViewCentered() {
+    return Math.abs(translateX) <= CENTER_TOLERANCE_PX && Math.abs(translateY) <= CENTER_TOLERANCE_PX;
+}
+
+function updateCenterButtonVisibility() {
+    const centerBtn = document.getElementById('center-btn');
+    if (!centerBtn) return;
+    const isZoomedIn = scale > 1.01;
+    centerBtn.style.display = isZoomedIn && !isViewCentered() ? 'inline-block' : 'none';
+}
+
+function centerView() {
+    translateX = 0;
+    translateY = 0;
+    applyTransform();
+}
+
+window.centerView = centerView;
+
 // Apply transformations (zoom and pan)
 function applyTransform() {
     constrainMovement(); // Ensure panning stays within bounds
     videoElement.style.transform = `translate(-50%, -50%) translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    updateCenterButtonVisibility();
 }
 
 //Zoom using the vertical slider
@@ -232,11 +253,13 @@ function adjustZoom() {
         resetBtn.style.display = 'none';
         }
     }
+    updateCenterButtonVisibility();
 }
 
 // Change zoom via + / - buttons by delta (e.g., 0.1)
 function changeZoom(delta) {
     const zoomSlider = document.getElementById('zoom-slider');
+    const resetBtn = document.getElementById('reset-btn');
     if (!zoomSlider) return;
 
     const min = parseFloat(zoomSlider.min) || 1;
@@ -269,6 +292,7 @@ function changeZoom(delta) {
         resetBtn.style.display = 'none';
         }
     }
+    updateCenterButtonVisibility();
 }
 
 // Combine Predefined and Adjustable Custom Filters
@@ -441,6 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             resetBtn.style.display = 'none';
         }
+        updateCenterButtonVisibility();
     }
 
     // Hook into existing slider behaviour
@@ -459,6 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTransform();
         // Hide the button again
         resetBtn.style.display = 'none';
+        updateCenterButtonVisibility();
     };
 
     // Initialize button state on page load

@@ -1,69 +1,7 @@
-const pageContent = {
-    home: "",
-    team: `
-        <h2>Team</h2>
-        <p class="section-subtitle">The people building this project together</p>
-
-        <section>
-            <h3>KARE Team</h3>
-            <p><strong>Faculty:</strong> Dr. Abishek Tripathi</p>
-            <p><strong>Student Team Members:</strong></p>
-            <ul>
-                <li>Gautham Sankar V</li>
-                <li>Hariram S</li>
-                <li>Mohammed Sulthan Ishaq</li>
-                <li>Kothamasu Nikhil</li>
-                <li>K V S S Ram Santosh Babu</li>
-                <li>Setu Sai Ram Y</li>
-                <li>B Vikram</li>
-                <li>Sethu Madhavan R</li>
-                <li>D Varsha</li>
-            </ul>
-        </section>
-
-        <section>
-            <h3>Purdue Team</h3>
-            <p><strong>Faculty Advisors:</strong></p>
-            <ul>
-                <li>Dr. Willim Oakes</li>
-                <li>Adam Renie</li>
-                <li>Aiden Gonzalez</li>
-                <li>Scott Malloy</li>
-            </ul>
-            <p><strong>Student Team:</strong></p>
-            <ul>
-                <li>Pooja Anil</li>
-                <li>Drew Sheedy</li>
-                <li>Thomas Sherman</li>
-            </ul>
-        </section>
-    `,
-    about: `
-        <h2>About</h2>
-        <p class="section-subtitle">Why this website exists</p>
-
-        <section>
-            <h3>Our Goal</h3>
-            <p>We built this website to help students read small text more comfortably. The tools are designed to be simple, clear, and easy to use in class or at home.</p>
-        </section>
-
-        <section>
-            <h3>What the Website Can Do</h3>
-            <ul>
-                <li>Make text bigger with zoom controls.</li>
-                <li>Change colors to improve reading comfort.</li>
-                <li>Use toggle screen to focus on the reading area.</li>
-            </ul>
-        </section>
-
-        <section>
-            <h3>Who It Helps</h3>
-            <p>This website is made to support partially visually impaired students by giving them more control over how they view learning materials.</p>
-        </section>
-    `
-};
+const pageContent = {};
 
 let homeContentCache = "";
+let tabContentCache = null;
 
 async function loadHomeContent() {
     if (homeContentCache) {
@@ -93,6 +31,30 @@ async function loadHomeContent() {
     return homeContentCache;
 }
 
+async function loadTabContent() {
+    if (tabContentCache) {
+        return tabContentCache;
+    }
+
+    const response = await fetch(`/home-tab-content?_=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) {
+        throw new Error(`Failed to load tab content: ${response.status}`);
+    }
+
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const contentMap = {};
+    doc.querySelectorAll("[data-tab-content]").forEach((element) => {
+        const tabName = element.getAttribute("data-tab-content");
+        if (tabName) {
+            contentMap[tabName] = element.innerHTML;
+        }
+    });
+
+    tabContentCache = contentMap;
+    return tabContentCache;
+}
+
 async function showInfo(infoType) {
     const infoBox = document.getElementById('info-box');
 
@@ -106,7 +68,13 @@ async function showInfo(infoType) {
         return;
     }
 
-    infoBox.innerHTML = pageContent[infoType] || '<h2>Info</h2><p>No information available.</p>';
+    try {
+        const tabContent = await loadTabContent();
+        infoBox.innerHTML = tabContent[infoType] || pageContent[infoType] || '<h2>Info</h2><p>No information available.</p>';
+    } catch (error) {
+        console.error(error);
+        infoBox.innerHTML = '<h2>Info</h2><p>Unable to load this section.</p>';
+    }
 }
 
 window.addEventListener('DOMContentLoaded', () => {

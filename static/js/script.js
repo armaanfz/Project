@@ -3,6 +3,17 @@ const pageContent = {};
 let homeContentCache = "";
 let tabContentCache = null;
 
+function extractTabContent(sourceRoot) {
+    const contentMap = {};
+    sourceRoot.querySelectorAll("[data-tab-content]").forEach((element) => {
+        const tabName = element.getAttribute("data-tab-content");
+        if (tabName) {
+            contentMap[tabName] = element.innerHTML;
+        }
+    });
+    return contentMap;
+}
+
 async function loadHomeContent() {
     if (homeContentCache) {
         return homeContentCache;
@@ -36,20 +47,26 @@ async function loadTabContent() {
         return tabContentCache;
     }
 
-    const response = await fetch(`/home-tab-content?_=${Date.now()}`, { cache: "no-store" });
+    const embeddedSource = document.getElementById("tab-content-source");
+    if (embeddedSource) {
+        const embeddedContent = extractTabContent(embeddedSource);
+        if (Object.keys(embeddedContent).length > 0) {
+            tabContentCache = embeddedContent;
+            return tabContentCache;
+        }
+    }
+
+    const response = await fetch(`home-tab-content?_=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) {
         throw new Error(`Failed to load tab content: ${response.status}`);
     }
 
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const contentMap = {};
-    doc.querySelectorAll("[data-tab-content]").forEach((element) => {
-        const tabName = element.getAttribute("data-tab-content");
-        if (tabName) {
-            contentMap[tabName] = element.innerHTML;
-        }
-    });
+    const contentMap = extractTabContent(doc);
+    if (Object.keys(contentMap).length === 0) {
+        throw new Error("No tab content found in home-tab-content template.");
+    }
 
     tabContentCache = contentMap;
     return tabContentCache;

@@ -10,6 +10,10 @@ def index():
 def introduction():
     return render_template("introduction.html")
 
+@app.route("/home-tab-content")
+def home_tab_content():
+    return render_template("home_tab_content.html")
+
 @app.route("/samples")
 def samples():
     return render_template("samples.html")

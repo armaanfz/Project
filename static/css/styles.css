@@ -2,15 +2,18 @@ body {
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-image: url('magnifier.png'); /* Specify the local path */
-    background-size: cover; /* Cover the entire background */
-    background-position: center 7%; /* Center horizontally, 7% from the top */
+    background-image: linear-gradient(rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.86)), url('magnifier.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    color: #ffffff;
+    min-height: 100vh;
 }
 
 nav {
-    background-color: #333;
-    color: white;
-    padding: 10px 0;
+    background-color: #000;
+    border-bottom: 2px solid #ffd700;
+    padding: 12px 0;
 }
 
 .container {
@@ -25,20 +28,13 @@ nav {
 h1 {
     margin: 0;
     font-size: 36px;
-}
-
-h2 {
-    font-size: 36px;
-    color: azure;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    color: #ffd700;
 }
 
 nav ul {
     list-style-type: none;
     padding: 0;
+    margin: 0;
 }
 
 nav ul li {
@@ -47,54 +43,104 @@ nav ul li {
 }
 
 nav ul li a {
-    color: white;
+    color: #ffffff;
     text-decoration: none;
+    font-weight: 700;
+    font-size: 18px;
 }
 
-.info-box {
-    display: none;
-    width: 900px;
-    height: 450px;
-    background-color: lightgray;
-    position: fixed;
-    top: 55%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+nav ul li a:hover {
+    color: #ffd700;
+    text-shadow: 0 0 8px rgba(255, 215, 0, 0.8);
+}
+
+.page-layout {
+    width: min(1240px, 94%);
+    margin: 24px auto;
+    display: grid;
+    grid-template-columns: 2.2fr 1fr;
+    gap: 18px;
+    align-items: start;
+}
+
+.content-panel,
+.quick-start {
+    background: rgba(17, 17, 17, 0.92);
+    border: 2px solid #ffd700;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    color: #ffffff;
+}
+
+.content-panel {
+    padding: 24px;
+    line-height: 1.65;
+    min-height: 520px;
+}
+
+.quick-start {
+    position: sticky;
+    top: 20px;
     padding: 20px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    border: 2px solid black;
-    overflow-y: auto; /* Add scroll feature */
 }
 
-#next-btn {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 10px 20px;
-    font-size: 16px;
-    cursor: pointer;
-    background-color: #333;
-    color: white;
-    border: none;
-    border-radius: 5px;
-}
-
-/* Team Container Specific Styles */
-.team-container {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    height: 100%;
-    padding: 20px;
-    box-sizing: border-box;
-}
-
-.team-column {
-    width: 45%;
-    overflow-y: auto; /* Add scroll feature */
-}
-
-.team-column h2 {
+.content-panel h2,
+.quick-start h2 {
     margin-top: 0;
+    margin-bottom: 8px;
+    color: #ffd700;
+    font-size: 32px;
 }
 
+.section-subtitle {
+    margin-top: 4px;
+    font-size: 18px;
+    color: #ffffff;
+}
+
+.content-panel h3 {
+    color: #ffd700;
+    margin-bottom: 8px;
+}
+
+.content-panel section {
+    margin-bottom: 18px;
+}
+
+.content-panel ul {
+    margin-top: 8px;
+    padding-left: 24px;
+}
+
+.start-btn {
+    width: 100%;
+    padding: 18px 20px;
+    margin: 14px 0;
+    font-size: 28px;
+    font-weight: 800;
+    cursor: pointer;
+    background-color: #000;
+    color: #ffd700;
+    border: 2px solid #ffd700;
+    border-radius: 10px;
+}
+
+.start-btn:hover {
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.8);
+    transform: translateY(-1px);
+}
+
+.tip {
+    font-size: 15px;
+    color: #ffffff;
+}
+
+@media (max-width: 980px) {
+    .page-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-start {
+        position: static;
+    }
+}

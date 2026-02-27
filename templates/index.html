@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Magnifier</title>
-    <!-- load styles from Flask static/ -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
@@ -12,21 +11,28 @@
     <div class="container">
         <h1>MAGNIFIER</h1>
         <ul>
-            <li><a href="#" onclick="showInfo('home')">Home</a></li>
-            <li><a href="#" onclick="showInfo('team')">Team</a></li>
-            <li><a href="#" onclick="showInfo('collaboration')">Collaboration</a></li>
-            <li><a href="#" onclick="showInfo('about')">About</a></li>
-            <li><a href="#" onclick="showInfo('media')">Media</a></li>
+            <li><a href="#" data-tab="home">Home</a></li>
+            <li><a href="#" data-tab="team">Team</a></li>
+            <li><a href="#" data-tab="about">About</a></li>
         </ul>
     </div>
 </nav>
-<h2></h2>
-<div class="info-box" id="info-box"></div>
-<!-- replace the existing Next button -->
-<button id="next-btn" onclick="window.location.href='{{ url_for('introduction') }}'">Next</button>
 
+<div class="page-layout">
+    <main class="content-panel" id="info-box" aria-live="polite"></main>
 
-<!-- script loaded from Flask static/; defer ensures functions are defined when user clicks -->
+    <aside class="quick-start" aria-label="Quick start">
+        <h2>Ready to Read?</h2>
+        <p>When you are ready, click the button below to start using the Magnifier.</p>
+        <button class="start-btn" id="start-samples-btn" data-samples-url="{{ url_for('samples') }}">Start Magnifier</button>
+        <p class="tip">Tip: You can always come back to Home if you need help.</p>
+    </aside>
+</div>
+
+<div id="tab-content-source" hidden>
+    {% include "home_tab_content.html" %}
+</div>
+
 <script defer src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>

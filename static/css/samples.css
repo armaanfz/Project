@@ -67,6 +67,12 @@ body, html {
     box-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
 }
 
+.btn:focus-visible,
+.filter-btn:focus-visible {
+    outline: 2px solid #ffd700;
+    outline-offset: 2px;
+}
+
 /* Responsive filter menu: flexible, scrollable, wraps on small screens */
 #menu {
   position: fixed;
@@ -338,10 +344,14 @@ body, html {
   position: relative;
   background: transparent;
   cursor: pointer;
-  outline: none;
 
   /* prevent layout shift caused by rotation */
   transform-origin: center;
+}
+
+#zoom-slider:focus-visible {
+  outline: 2px solid #ffd700;
+  outline-offset: 2px;
 }
 
 /* Track */
@@ -530,9 +540,9 @@ body, html {
   border: 0;
 }
 
-/* Kill Firefox focus ring */
-#mask-controls input[type="range"]:focus {
-  outline: none;
+#mask-controls input[type="range"]:focus-visible {
+  outline: 2px solid #ffd700;
+  outline-offset: 2px;
 }
 
 /* Mask button active state */

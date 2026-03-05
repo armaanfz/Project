@@ -75,6 +75,10 @@ async function startCamera(videoEl, opts = {}) {
   };
 
   try {
+    // Stop existing stream if any (avoid leak when re-initializing)
+    if (videoEl.srcObject && typeof videoEl.srcObject.getTracks === 'function') {
+      videoEl.srcObject.getTracks().forEach((t) => t.stop());
+    }
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     videoEl.srcObject = stream;
     videoEl.autoplay = true;
@@ -120,24 +124,7 @@ function setCanvasToVideoSize(canvas, videoEl, scale = 1.0) {
   canvas.style.height = `${Math.round(videoPixelH)}px`;
 }
 
-/* Optional: auto-start camera when DOM is ready. If you start camera manually elsewhere, remove this block. */
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const vid = document.getElementById('video');
-    if (!vid) return;
-    // Change preferExact1080 to true if you want the getUserMedia call to fail when 1080p not available.
-    await startCamera(vid, { preferExact1080: false });
-
-    // Example: if you already have overlay canvas(s), align them to the negotiated size:
-    const overlay = document.getElementById('overlay-canvas') || document.getElementById('tritanopia-overlay-canvas');
-    if (overlay instanceof HTMLCanvasElement) {
-      // If you want full native processing, use scale = 1.0
-      setCanvasToVideoSize(overlay, vid, 1.0);
-    }
-  } catch (e) {
-    console.warn('Camera auto-start failed or was denied:', e);
-  }
-});
+/* Camera is started once in the async IIFE below; no duplicate DOMContentLoaded start here. */
 /* ---------- end camera / 1080p helpers ---------- */
 
 
@@ -572,7 +559,7 @@ function _ensureMaskUIExists() {
       label.htmlFor = 'mask-radius';
       label.style.color = '#fff';
       label.style.marginRight = '8px';
-      label.textContent = 'Bar height (px)';
+      label.textContent = 'Bar size (%)';
       maskControls.appendChild(label);
     }
     if (!document.getElementById('mask-radius')) {
@@ -580,11 +567,11 @@ function _ensureMaskUIExists() {
       input.type = 'range';
       input.id = 'mask-radius';
       input.min = '0';
-      input.max = '500';
-      input.value = String(_barsMaskState.barHeight);
+      input.max = '48';
+      input.value = String(_barsMaskState.barPct ?? 5);
       input.style.width = '280px';
       input.addEventListener('input', (e) => {
-        _barsMaskState.barHeight = Math.round(Number(e.target.value) || 0);
+        _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
         drawBarsMask();
       });
       maskControls.appendChild(input);

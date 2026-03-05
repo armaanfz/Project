@@ -228,19 +228,23 @@ function applyTransform() {
     updateCenterButtonVisibility();
 }
 
-//Zoom using the vertical slider
+// Zoom using the vertical slider; update aria for screen readers
 function adjustZoom() {
     scale = parseFloat(zoomSlider.value);
     applyTransform();
     const resetBtn = document.getElementById('reset-btn');
     if (resetBtn) {
         if (scale > 1.01) {
-        resetBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'inline-block';
         } else {
-        resetBtn.style.display = 'none';
+            resetBtn.style.display = 'none';
         }
     }
     updateCenterButtonVisibility();
+    if (zoomSlider) {
+        zoomSlider.setAttribute('aria-valuenow', String(scale));
+        zoomSlider.setAttribute('aria-valuetext', `Zoom ${scale.toFixed(1)}x`);
+    }
 }
 
 // Change zoom via + / - buttons by delta (e.g., 0.1)
@@ -315,19 +319,24 @@ function applyFilter(filter) {
         // startCamera will set videoElement.srcObject and wait for loadedmetadata
         const stream = await startCamera(videoElement, { preferExact1080: false });
 
+        // Stop camera when leaving the page (e.g. Back button) so the camera LED turns off
+        function stopCameraStream() {
+            if (videoElement.srcObject && typeof videoElement.srcObject.getTracks === 'function') {
+                videoElement.srcObject.getTracks().forEach((t) => t.stop());
+                videoElement.srcObject = null;
+            }
+        }
+        window.addEventListener('pagehide', stopCameraStream);
+        window.addEventListener('beforeunload', stopCameraStream);
+
         // Optional: after camera starts, align any overlay / processing canvases to the native video pixels
-        // If you use different canvas ids, add them here or call setCanvasToVideoSize wherever you create canvases.
         const overlayIds = ['overlay-canvas', 'tritanopia-overlay-canvas'];
         overlayIds.forEach(id => {
             const c = document.getElementById(id);
             if (c instanceof HTMLCanvasElement) setCanvasToVideoSize(c, videoElement, 1.0);
         });
 
-        // Log final negotiated resolution
         console.log('Camera stream active. Negotiated resolution (videoElement):', videoElement.videoWidth, 'x', videoElement.videoHeight);
-
-        // If you need to switch to environment-facing camera specifically, you can select a deviceId from enumerateDevices
-        // and pass deviceId: { exact: '...'} to startCamera by adding support for deviceId in startCamera constraints.
     } catch (err) {
         console.error('Camera startup failed:', err);
     }
@@ -455,27 +464,67 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCenterButtonVisibility();
     }
 
-    // Hook into existing slider behaviour
-    slider.addEventListener('input', updateResetButtonVisibility);
-    slider.addEventListener('change', updateResetButtonVisibility);
+    // Hook into existing slider behaviour (zoom + reset button visibility + aria)
+    function onZoomInput() {
+        adjustZoom();
+        updateResetButtonVisibility();
+    }
+    slider.addEventListener('input', onZoomInput);
+    slider.addEventListener('change', onZoomInput);
+
+    // Button listeners (no inline handlers)
+    document.getElementById('back-btn')?.addEventListener('click', goHome);
+    document.getElementById('filter-button')?.addEventListener('click', toggleMenu);
+    document.getElementById('center-btn')?.addEventListener('click', centerView);
+    resetBtn.addEventListener('click', () => window.resetZoom());
+
+    document.getElementById('zoom-in')?.addEventListener('click', () => changeZoom(0.1));
+    document.getElementById('zoom-out')?.addEventListener('click', () => changeZoom(-0.1));
+
+    // Filter buttons by data-filter
+    const filterMap = {
+        'normal': applyNormal,
+        'protanopia': applyProtanopia,
+        'deuteranopia': applyDeuteranopia,
+        'tritanopia': applyTritanopia,
+        'grayscale': applyGrayscale,
+        'inverted': applyInverted,
+        'inverted-grayscale': applyInvertedGrayscale,
+        'blue-on-yellow': applyBlueOnYellow,
+        'orange-on-black': applyNeonOrangeOnBlack,
+        'green-on-black': applyNeonGreenOnBlack,
+        'yellow-on-black': applyYellowOnBlack,
+        'purple-on-black': applyPurpleOnBlack
+    };
+    document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
+        const fn = filterMap[btn.dataset.filter];
+        if (fn) btn.addEventListener('click', fn);
+    });
+
+    // Custom filter sliders
+    ['hue', 'brightness', 'contrast', 'saturation'].forEach((id) => {
+        document.getElementById(id)?.addEventListener('input', applyCustomFilter);
+        document.getElementById(id)?.addEventListener('change', applyCustomFilter);
+    });
 
     // Actual Reset Zoom function
     window.resetZoom = function () {
-        // Reset numeric state
         scale = 1;
         translateX = 0;
         translateY = 0;
-        // Reset slider UI
         slider.value = '1';
-        // Re-apply transform so video recenters and zoom resets
         applyTransform();
-        // Hide the button again
         resetBtn.style.display = 'none';
         updateCenterButtonVisibility();
+        if (slider) {
+            slider.setAttribute('aria-valuenow', '1');
+            slider.setAttribute('aria-valuetext', 'Zoom 1x');
+        }
     };
 
-    // Initialize button state on page load
+    // Initialize button state and zoom aria on page load
     updateResetButtonVisibility();
+    adjustZoom();
 });
 
 // Back button function
@@ -559,7 +608,7 @@ function _ensureMaskUIExists() {
       label.htmlFor = 'mask-radius';
       label.style.color = '#fff';
       label.style.marginRight = '8px';
-      label.textContent = 'Bar size (%)';
+      label.textContent = 'Bar size';
       maskControls.appendChild(label);
     }
     if (!document.getElementById('mask-radius')) {

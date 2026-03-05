@@ -4,7 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Adjustable Webcam Access with Zoom</title>
+    <meta name="description" content="Magnifier camera – live zoom, color filters, and focus mask to help you read text more clearly.">
+    <title>Magnifier – Camera</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/samples.css') }}">
 </head>
 
@@ -40,28 +42,28 @@
             </filter>
         </defs>
     </svg>
-    <button class="btn" id="back-btn" onclick="goHome()">⟵ Back</button>
+    <button class="btn" id="back-btn" aria-label="Back to Magnifier home">⟵ Back</button>
     <div id="video-container">
-        <video id="video" src="" autoplay playsinline muted></video>
+        <video id="video" src="" autoplay playsinline muted aria-label="Live camera view"></video>
         
         <div id="controls">
-            <button class="btn" id="tutorial-btn">Tutorial</button>
-            <button class="btn" id="filter-button" onclick="toggleMenu()">Filters</button>
-            <button class="btn" id="reset-btn" onclick="resetZoom()" style="display: none;">Reset Zoom</button>
-            <button class="btn" id="center-btn" onclick="centerView()" style="display: none;">Center</button>
-            <button class="btn" id="mask-btn" aria-pressed="false" title="Toggle mask">Mask</button>
+            <button class="btn" id="tutorial-btn" aria-label="Start tutorial">Tutorial</button>
+            <button class="btn" id="filter-button" aria-label="Open filters menu">Filters</button>
+            <button class="btn" id="reset-btn" aria-label="Reset zoom to default" style="display: none;">Reset Zoom</button>
+            <button class="btn" id="center-btn" aria-label="Center the view" style="display: none;">Center</button>
+            <button class="btn" id="mask-btn" aria-pressed="false" aria-label="Toggle reading mask">Mask</button>
             <div id="mask-controls" style="display:none;">
-                <label for="mask-radius" id="mask-radius-label" style="color:#fff; margin-right:8px;">Height</label>
-                <input type="range" id="mask-radius" min="0" max="50" value="10" />
-                <button class="btn" id="mask-orientation-btn">Horizontal</button>
-                <button class="btn" id="mask-invert-btn">Invert</button>
+                <label for="mask-radius" id="mask-radius-label" style="color:#fff; margin-right:8px;">Bar size</label>
+                <input type="range" id="mask-radius" min="0" max="48" value="5" aria-label="Mask bar size percentage" />
+                <button class="btn" id="mask-orientation-btn" aria-label="Switch mask orientation">Horizontal</button>
+                <button class="btn" id="mask-invert-btn" aria-label="Invert mask (focus center or edges)">Invert</button>
             </div>
         </div>
         
         <div class="zoom-container">
-            <button class="btn zoom-btn" id="zoom-in" aria-label="Zoom in" onclick="changeZoom(0.1)">+</button>
-            <input type="range" id="zoom-slider" min="1" max="5" step="0.1" value="1" onchange="adjustZoom()">
-            <button class="btn zoom-btn" id="zoom-out" aria-label="Zoom out" onclick="changeZoom(-0.1)">−</button>
+            <button class="btn zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+            <input type="range" id="zoom-slider" min="1" max="5" step="0.1" value="1" aria-label="Zoom level" aria-valuemin="1" aria-valuemax="5">
+            <button class="btn zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
         </div>
     </div>
 
@@ -69,18 +71,18 @@
         <div id="filter-list">
             <h3>Predefined Filters</h3>
             <div class="scrollable">
-                <button class="filter-btn" onclick="applyNormal()">Normal</button>
-                <button class="filter-btn" onclick="applyProtanopia()">PT</button>
-                <button class="filter-btn" onclick="applyDeuteranopia()">DT</button>
-                <button class="filter-btn" onclick="applyTritanopia()">TT</button>
-                <button class="filter-btn" onclick="applyGrayscale()">Grayscale</button>
-                <button class="filter-btn" onclick="applyInverted()">Inverted</button>
-                <button class="filter-btn" onclick="applyInvertedGrayscale()">Inverted Grayscale</button>
-                <button class="filter-btn" onclick="applyBlueOnYellow()">Blue on Yellow</button>
-                <button class="filter-btn" onclick="applyNeonOrangeOnBlack()">Orange on Black</button>
-                <button class="filter-btn" onclick="applyNeonGreenOnBlack()">Green on Black</button>
-                <button class="filter-btn" onclick="applyYellowOnBlack()">Yellow on Black</button>
-                <button class="filter-btn" onclick="applyPurpleOnBlack()">Purple on Black</button>
+                <button class="filter-btn" data-filter="normal" aria-label="Normal colors">Normal</button>
+                <button class="filter-btn" data-filter="protanopia" aria-label="Protanopia color simulation">PT</button>
+                <button class="filter-btn" data-filter="deuteranopia" aria-label="Deuteranopia color simulation">DT</button>
+                <button class="filter-btn" data-filter="tritanopia" aria-label="Tritanopia color simulation">TT</button>
+                <button class="filter-btn" data-filter="grayscale" aria-label="Grayscale">Grayscale</button>
+                <button class="filter-btn" data-filter="inverted" aria-label="Inverted colors">Inverted</button>
+                <button class="filter-btn" data-filter="inverted-grayscale" aria-label="Inverted grayscale">Inverted Grayscale</button>
+                <button class="filter-btn" data-filter="blue-on-yellow" aria-label="Blue on yellow">Blue on Yellow</button>
+                <button class="filter-btn" data-filter="orange-on-black" aria-label="Orange on black">Orange on Black</button>
+                <button class="filter-btn" data-filter="green-on-black" aria-label="Green on black">Green on Black</button>
+                <button class="filter-btn" data-filter="yellow-on-black" aria-label="Yellow on black">Yellow on Black</button>
+                <button class="filter-btn" data-filter="purple-on-black" aria-label="Purple on black">Purple on Black</button>
             </div>
 
             <div class="custom-filter">
@@ -89,22 +91,22 @@
                 <div class="custom-slider-group">
                     <div class="custom-slider-col">
                         <label for="hue">Hue</label>
-                        <input type="range" id="hue" min="0" max="360" value="0" onchange="applyCustomFilter()">
+                        <input type="range" id="hue" min="0" max="360" value="0" aria-label="Hue">
                     </div>
 
                     <div class="custom-slider-col">
                         <label for="brightness">Brightness</label>
-                        <input type="range" id="brightness" min="0" max="200" value="100" onchange="applyCustomFilter()">
+                        <input type="range" id="brightness" min="0" max="200" value="100" aria-label="Brightness">
                     </div>
 
                     <div class="custom-slider-col">
                         <label for="contrast">Contrast</label>
-                        <input type="range" id="contrast" min="0" max="200" value="100" onchange="applyCustomFilter()">
+                        <input type="range" id="contrast" min="0" max="200" value="100" aria-label="Contrast">
                     </div>
 
                     <div class="custom-slider-col">
                         <label for="saturation">Saturation</label>
-                        <input type="range" id="saturation" min="0" max="200" value="100" onchange="applyCustomFilter()">
+                        <input type="range" id="saturation" min="0" max="200" value="100" aria-label="Saturation">
                     </div>
                 </div>
             </div>

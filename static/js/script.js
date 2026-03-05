@@ -56,7 +56,7 @@ async function loadTabContent() {
         }
     }
 
-    const response = await fetch(`home-tab-content?_=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch(`/home-tab-content?_=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) {
         throw new Error(`Failed to load tab content: ${response.status}`);
     }

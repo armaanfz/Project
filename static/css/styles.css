@@ -2,7 +2,7 @@ body {
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-image: linear-gradient(rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.86)), url('magnifier.png');
+    background-image: linear-gradient(rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.86)), url('../images/magnifier.png');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;

@@ -54,21 +54,3 @@ body {
 .introduction li {
     margin-bottom: 6px;
 }
-
-#next-btn {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 12px 24px;
-    font-size: 18px;
-    font-weight: bold;
-    cursor: pointer;
-    background-color: #0b4f8a;
-    color: white;
-    border: none;
-    border-radius: 8px;
-}
-
-#next-btn:hover {
-    background-color: #083a65;
-}

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,16 +9,18 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/samples.css') }}">
     <style>
-        /* Remote-specific overrides */
         #stream-img {
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%) scale(1);
+            transform-origin: center center;
             width: 100vw;
             height: 100vh;
             object-fit: cover;
+            transition: transform 0.3s ease;
         }
+
         #remote-badge {
             position: fixed;
             top: 20px;
@@ -33,11 +36,9 @@
         }
     </style>
 </head>
+
 <body>
-    <!-- SVG color-blindness filters (same as samples.html) -->
-    <svg xmlns="http://www.w3.org/2000/svg"
-         style="position:absolute;width:0;height:0;overflow:hidden"
-         aria-hidden="true" focusable="false">
+    <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
         <defs>
             <filter id="filter-protanopia">
                 <feColorMatrix type="matrix" values="
@@ -63,40 +64,57 @@
         </defs>
     </svg>
 
-    <span id="remote-badge"> Live – Remote View</span>
+    <button class="btn" id="back-btn" aria-label="Back to Magnifier home">⟵ Back</button>
+    <span id="remote-badge">Live – Remote View</span>
 
     <div id="video-container">
-        <!-- MJPEG stream rendered as an img; CSS filters are applied via JS below -->
         <img id="stream-img"
              src="{{ url_for('video_feed') }}"
              alt="Live camera stream"
              aria-label="Live camera stream from Raspberry Pi">
 
         <div id="controls">
+            <button class="btn" id="tutorial-btn" aria-label="Start tutorial">Tutorial</button>
             <button class="btn" id="filter-button" aria-label="Open filters menu">Filters</button>
+            <button class="btn" id="reset-btn" aria-label="Reset zoom to default" style="display: none;">Reset Zoom</button>
+            <button class="btn" id="center-btn" aria-label="Center the view" style="display: none;">Center</button>
+            <button class="btn" id="mask-btn" aria-pressed="false" aria-label="Toggle reading mask">Mask</button>
+            <div id="mask-controls" style="display:none;">
+                <label for="mask-radius" id="mask-radius-label" style="color:#fff; margin-right:8px;">Bar size</label>
+                <input type="range" id="mask-radius" min="0" max="48" value="5" aria-label="Mask bar size percentage" />
+                <button class="btn" id="mask-orientation-btn" aria-label="Switch mask orientation">Horizontal</button>
+                <button class="btn" id="mask-invert-btn" aria-label="Invert mask (focus center or edges)">Invert</button>
+            </div>
+        </div>
+
+        <div class="zoom-container">
+            <button class="btn zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+            <input type="range" id="zoom-slider" min="1" max="5" step="0.1" value="1" aria-label="Zoom level" aria-valuemin="1" aria-valuemax="5">
+            <button class="btn zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
         </div>
     </div>
 
-    <!-- Filter menu (identical structure to samples.html) -->
     <div id="menu">
         <div id="filter-list">
             <h3>Predefined Filters</h3>
             <div class="scrollable">
-                <button class="filter-btn" data-filter="normal"             aria-label="Normal colors">Normal</button>
-                <button class="filter-btn" data-filter="protanopia"         aria-label="Protanopia">PT</button>
-                <button class="filter-btn" data-filter="deuteranopia"       aria-label="Deuteranopia">DT</button>
-                <button class="filter-btn" data-filter="tritanopia"         aria-label="Tritanopia">TT</button>
-                <button class="filter-btn" data-filter="grayscale"          aria-label="Grayscale">Grayscale</button>
-                <button class="filter-btn" data-filter="inverted"           aria-label="Inverted">Inverted</button>
+                <button class="filter-btn" data-filter="normal" aria-label="Normal colors">Normal</button>
+                <button class="filter-btn" data-filter="protanopia" aria-label="Protanopia color simulation">PT</button>
+                <button class="filter-btn" data-filter="deuteranopia" aria-label="Deuteranopia color simulation">DT</button>
+                <button class="filter-btn" data-filter="tritanopia" aria-label="Tritanopia color simulation">TT</button>
+                <button class="filter-btn" data-filter="grayscale" aria-label="Grayscale">Grayscale</button>
+                <button class="filter-btn" data-filter="inverted" aria-label="Inverted colors">Inverted</button>
                 <button class="filter-btn" data-filter="inverted-grayscale" aria-label="Inverted Grayscale">Inverted Grayscale</button>
-                <button class="filter-btn" data-filter="blue-on-yellow"     aria-label="Blue on Yellow">Blue on Yellow</button>
-                <button class="filter-btn" data-filter="orange-on-black"    aria-label="Orange on Black">Orange on Black</button>
-                <button class="filter-btn" data-filter="green-on-black"     aria-label="Green on Black">Green on Black</button>
-                <button class="filter-btn" data-filter="yellow-on-black"    aria-label="Yellow on Black">Yellow on Black</button>
-                <button class="filter-btn" data-filter="purple-on-black"    aria-label="Purple on Black">Purple on Black</button>
+                <button class="filter-btn" data-filter="blue-on-yellow" aria-label="Blue on yellow">Blue on Yellow</button>
+                <button class="filter-btn" data-filter="orange-on-black" aria-label="Orange on black">Orange on Black</button>
+                <button class="filter-btn" data-filter="green-on-black" aria-label="Green on black">Green on Black</button>
+                <button class="filter-btn" data-filter="yellow-on-black" aria-label="Yellow on black">Yellow on Black</button>
+                <button class="filter-btn" data-filter="purple-on-black" aria-label="Purple on black">Purple on Black</button>
             </div>
+
             <div class="custom-filter">
                 <h3>Adjustable Filters</h3>
+
                 <div class="custom-slider-group">
                     <div class="custom-slider-col">
                         <label for="hue">Hue</label>
@@ -118,61 +136,7 @@
             </div>
         </div>
     </div>
-
-    <script>
-    (function () {
-        const streamImg = document.getElementById('stream-img');
-        const menu      = document.getElementById('menu');
-
-        // ── Filter state ────────────────────────────────────────────────────
-        let currentFilter = 'none';
-        const custom = { hue: 0, brightness: 100, contrast: 100, saturation: 100 };
-
-        function applyFilters() {
-            const pre = currentFilter !== 'none' ? currentFilter : '';
-            const adj = `hue-rotate(${custom.hue}deg) brightness(${custom.brightness}%) contrast(${custom.contrast}%) saturate(${custom.saturation}%)`;
-            streamImg.style.filter = `${pre} ${adj}`.trim();
-        }
-
-        // ── Predefined filter map ───────────────────────────────────────────
-        const filterMap = {
-            'normal':             'none',
-            'protanopia':         'url(#filter-protanopia)',
-            'deuteranopia':       'url(#filter-deuteranopia)',
-            'tritanopia':         'url(#filter-tritanopia)',
-            'grayscale':          'grayscale(100%)',
-            'inverted':           'invert(100%)',
-            'inverted-grayscale': 'grayscale(100%) invert(100%)',
-            'blue-on-yellow':     'sepia(100%) hue-rotate(180deg) saturate(300%) brightness(50%)',
-            'orange-on-black':    'invert(100%) sepia(100%) saturate(500%) hue-rotate(330deg) brightness(50%) contrast(200%)',
-            'green-on-black':     'invert(100%) sepia(100%) saturate(500%) hue-rotate(90deg) brightness(50%) contrast(200%)',
-            'yellow-on-black':    'invert(100%) brightness(80%) contrast(200%) sepia(100%) hue-rotate(60deg)',
-            'purple-on-black':    'invert(100%) brightness(70%) contrast(200%) sepia(100%) hue-rotate(300deg)'
-        };
-
-        document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const key = btn.dataset.filter;
-                currentFilter = filterMap[key] ?? 'none';
-                applyFilters();
-            });
-        });
-
-        // ── Adjustable sliders ──────────────────────────────────────────────
-        ['hue', 'brightness', 'contrast', 'saturation'].forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.addEventListener('input', () => {
-                custom[id] = el.value;
-                applyFilters();
-            });
-        });
-
-        // ── Filter menu toggle ──────────────────────────────────────────────
-        document.getElementById('filter-button')
-            ?.addEventListener('click', () => menu.classList.toggle('active'));
-    })();
-    </script>
+    <script defer src="{{ url_for('static', filename='js/samples.js') }}"></script>
 </body>
-</html>
 
+</html>

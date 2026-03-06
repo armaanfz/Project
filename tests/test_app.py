@@ -22,11 +22,23 @@ def test_home_returns_200(client):
     r = client.get("/")
     assert r.status_code == 200
     assert b"replace-this-with-a-strong-secret" not in r.data
+    assert b"Access Remote Stream" in r.data
 
 
 def test_samples_returns_200(client):
     r = client.get("/samples")
     assert r.status_code == 200
+
+
+def test_remote_returns_200_and_includes_remote_controls(client):
+    response = client.get("/remote")
+
+    assert response.status_code == 200
+    assert b"Access Remote Stream" not in response.data
+    assert b"Live \xe2\x80\x93 Remote View" in response.data
+    assert b"Tutorial" in response.data
+    assert b"Reset Zoom" in response.data
+    assert b"Mask" in response.data
 
 
 def test_home_tab_content_returns_200(client):

@@ -1,4 +1,7 @@
 const videoElement = document.getElementById('video');
+const remoteStreamElement = document.getElementById('stream-img');
+const viewerElement = videoElement || remoteStreamElement;
+const isRemoteStreamMode = !videoElement && !!remoteStreamElement;
 const videoContainer = document.getElementById('video-container');
 const menu = document.getElementById('menu');
 const zoomSlider = document.getElementById('zoom-slider');
@@ -190,8 +193,8 @@ videoContainer.addEventListener('touchend', () => {
 function constrainMovement() {
     const containerWidth = videoContainer.offsetWidth;
     const containerHeight = videoContainer.offsetHeight;
-    const videoWidth = videoElement.offsetWidth * scale;
-    const videoHeight = videoElement.offsetHeight * scale;
+    const videoWidth = viewerElement.offsetWidth * scale;
+    const videoHeight = viewerElement.offsetHeight * scale;
 
     // Determine the max translations to keep the video within bounds
     const maxTranslateX = (videoWidth - containerWidth) / 2;
@@ -224,7 +227,7 @@ window.centerView = centerView;
 // Apply transformations (zoom and pan)
 function applyTransform() {
     constrainMovement(); // Ensure panning stays within bounds
-    videoElement.style.transform = `translate(-50%, -50%) translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    viewerElement.style.transform = `translate(-50%, -50%) translate(${translateX}px, ${translateY}px) scale(${scale})`;
     updateCenterButtonVisibility();
 }
 
@@ -291,7 +294,7 @@ function applyCombinedFilters() {
     const predefinedFilter = currentFilter !== 'none' ? currentFilter : '';
     const adjustableFilter = `hue-rotate(${customFilters.hue}deg) brightness(${customFilters.brightness}%) contrast(${customFilters.contrast}%) saturate(${customFilters.saturation}%)`;
 
-    videoElement.style.filter = `${predefinedFilter} ${adjustableFilter}`.trim();
+    viewerElement.style.filter = `${predefinedFilter} ${adjustableFilter}`.trim();
 }
 
 // Adjustable Custom Filters
@@ -310,6 +313,11 @@ function applyFilter(filter) {
 }
 
 (async () => {
+    if (isRemoteStreamMode) {
+        applyTransform();
+        return;
+    }
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.error('getUserMedia is not supported in this browser');
         return;
@@ -554,7 +562,7 @@ const _barsMaskState = {
 function _ensureMaskUIExists() {
   // Ensure #controls exists
   let controls = document.getElementById('controls');
-  const videoContainer = document.getElementById('video-container') || videoElement.parentElement;
+  const videoContainer = document.getElementById('video-container') || viewerElement?.parentElement;
 
   // If no #controls, create one at bottom center of video-container
   if (!controls && videoContainer) {
@@ -640,7 +648,7 @@ function _ensureMaskUIExists() {
 function createBarsMaskCanvas() {
   if (_barsMaskState.canvas) return;
 
-  const parent = document.getElementById('video-container') || videoElement.parentElement;
+  const parent = document.getElementById('video-container') || viewerElement?.parentElement;
   if (!parent) {
     console.warn('createBarsMaskCanvas: parent container not found');
     return;
@@ -648,11 +656,11 @@ function createBarsMaskCanvas() {
 
   // Ensure video is behind
   try {
-    if (videoElement && videoElement.style) {
-      videoElement.style.setProperty('z-index', '0', 'important');
+    if (viewerElement && viewerElement.style) {
+      viewerElement.style.setProperty('z-index', '0', 'important');
       // ensure it's positioned so z-index takes effect
-      if (getComputedStyle(videoElement).position === 'static') {
-        videoElement.style.position = 'absolute';
+      if (getComputedStyle(viewerElement).position === 'static') {
+        viewerElement.style.position = 'absolute';
       }
     }
   } catch (e) { /* ignore */ }
@@ -694,7 +702,7 @@ function createBarsMaskCanvas() {
     const style = getComputedStyle(child);
 
     // If child is the video element, skip (we want video behind)
-    if (child === videoElement) return;
+    if (child === viewerElement) return;
 
     // Some elements have 'auto' z-index (NaN), treat as 0
     const z = parseInt(style.zIndex, 10);
@@ -717,7 +725,7 @@ function createBarsMaskCanvas() {
   const neededZ = canvasZ + 1;
   Array.from(parent.children).forEach((child) => {
     if (!(child instanceof HTMLElement)) return;
-    if (child === canvas || child === videoElement) return;
+    if (child === canvas || child === viewerElement) return;
 
     // Ensure positioned so z-index applies
     const computed = getComputedStyle(child);
@@ -750,7 +758,7 @@ function createBarsMaskCanvas() {
 
 function resizeBarsMaskCanvas() {
   if (!_barsMaskState.canvas) return;
-  const parent = document.getElementById('video-container') || videoElement.parentElement;
+  const parent = document.getElementById('video-container') || viewerElement?.parentElement;
   if (!parent) return;
   const rect = parent.getBoundingClientRect();
   // update canvas pixel buffer

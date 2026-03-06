@@ -78,5 +78,12 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const remoteButton = document.getElementById('start-remote-btn');
+    if (remoteButton) {
+        remoteButton.addEventListener('click', () => {
+            window.location.href = remoteButton.dataset.remoteUrl;
+        });
+    }
+
     void showInfo('home');
 });

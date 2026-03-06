@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 from flask import Flask, render_template, request
 
 app = Flask(__name__)
@@ -16,6 +17,9 @@ def shutdown():
     token = request.headers.get("X-Shutdown-Token")
     if token != SHUTDOWN_TOKEN:
         return "Forbidden", 403
+    # Close Chromium gracefully before shutting down (Raspberry Pi default browser)
+    subprocess.run(["pkill", "chromium"], capture_output=True)
+    time.sleep(2)
     subprocess.Popen(["sudo", "shutdown", "-h", "now"])
     return "Shutting down...", 200
 

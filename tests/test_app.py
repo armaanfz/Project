@@ -41,6 +41,38 @@ def test_remote_returns_200_and_includes_remote_controls(client):
     assert b"Mask" in response.data
 
 
+def test_video_feed_uses_local_profile_for_localhost(client, monkeypatch):
+    camera = object()
+    get_camera_mock = Mock(return_value=camera)
+    generate_mock = Mock(return_value=iter([b"frame"]))
+
+    monkeypatch.setattr(app_module, "_get_camera", get_camera_mock)
+    monkeypatch.setattr(app_module, "_generate_mjpeg", generate_mock)
+
+    response = client.get("/video_feed", base_url="http://localhost")
+
+    assert response.status_code == 200
+    get_camera_mock.assert_called_once_with("local")
+    generate_mock.assert_called_once_with(camera, "local")
+    assert response.headers["X-Accel-Buffering"] == "no"
+    assert response.headers["Cache-Control"] == "no-cache, no-store, must-revalidate"
+
+
+def test_video_feed_uses_remote_profile_for_non_local_host(client, monkeypatch):
+    camera = object()
+    get_camera_mock = Mock(return_value=camera)
+    generate_mock = Mock(return_value=iter([b"frame"]))
+
+    monkeypatch.setattr(app_module, "_get_camera", get_camera_mock)
+    monkeypatch.setattr(app_module, "_generate_mjpeg", generate_mock)
+
+    response = client.get("/video_feed", base_url="http://magnifier.example.com")
+
+    assert response.status_code == 200
+    get_camera_mock.assert_called_once_with("remote")
+    generate_mock.assert_called_once_with(camera, "remote")
+
+
 def test_home_tab_content_returns_200(client):
     r = client.get("/home-tab-content")
     assert r.status_code == 200
@@ -99,7 +131,7 @@ def test_generate_mjpeg_releases_camera_on_read_failure(monkeypatch):
 
     monkeypatch.setattr(app_module, "_release_camera", fake_release_camera)
 
-    frames = list(app_module._generate_mjpeg(FakeCamera()))
+    frames = list(app_module._generate_mjpeg(FakeCamera(), "remote"))
 
     assert frames == []
     assert released["called"] is True
@@ -117,7 +149,7 @@ def test_get_camera_raises_when_device_cannot_open(monkeypatch):
     monkeypatch.setattr(app_module.cv2, "VideoCapture", Mock(return_value=FakeCamera()))
 
     with pytest.raises(RuntimeError):
-        app_module._get_camera()
+        app_module._get_camera("local")
 
 
 def test_get_camera_configures_opened_device(monkeypatch):
@@ -134,13 +166,45 @@ def test_get_camera_configures_opened_device(monkeypatch):
     monkeypatch.setattr(app_module, "_camera", None)
     monkeypatch.setattr(app_module.cv2, "VideoCapture", Mock(return_value=FakeCamera()))
 
-    camera = app_module._get_camera()
+    camera = app_module._get_camera("local")
 
     assert camera is not None
     assert set_calls == [
-        (app_module.cv2.CAP_PROP_FRAME_WIDTH, app_module.CAMERA_WIDTH),
-        (app_module.cv2.CAP_PROP_FRAME_HEIGHT, app_module.CAMERA_HEIGHT),
-        (app_module.cv2.CAP_PROP_FPS, app_module.CAMERA_FPS),
+        (app_module.cv2.CAP_PROP_BUFFERSIZE, 1),
+        (app_module.cv2.CAP_PROP_FRAME_WIDTH, app_module.STREAM_PROFILES["local"]["width"]),
+        (app_module.cv2.CAP_PROP_FRAME_HEIGHT, app_module.STREAM_PROFILES["local"]["height"]),
+        (app_module.cv2.CAP_PROP_FPS, app_module.STREAM_PROFILES["local"]["fps"]),
     ]
 
     app_module._camera = None
+
+
+def test_get_camera_reconfigures_when_mode_changes(monkeypatch):
+    set_calls = []
+
+    class FakeCamera:
+        def isOpened(self):
+            return True
+
+        def set(self, prop, value):
+            set_calls.append((prop, value))
+            return True
+
+    fake_camera = FakeCamera()
+    monkeypatch.setattr(app_module, "_camera", None)
+    monkeypatch.setattr(app_module, "_current_mode", None)
+    monkeypatch.setattr(app_module.cv2, "VideoCapture", Mock(return_value=fake_camera))
+
+    app_module._get_camera("local")
+    app_module._get_camera("remote")
+
+    assert set_calls == [
+        (app_module.cv2.CAP_PROP_BUFFERSIZE, 1),
+        (app_module.cv2.CAP_PROP_FRAME_WIDTH, app_module.STREAM_PROFILES["local"]["width"]),
+        (app_module.cv2.CAP_PROP_FRAME_HEIGHT, app_module.STREAM_PROFILES["local"]["height"]),
+        (app_module.cv2.CAP_PROP_FPS, app_module.STREAM_PROFILES["local"]["fps"]),
+        (app_module.cv2.CAP_PROP_BUFFERSIZE, 1),
+        (app_module.cv2.CAP_PROP_FRAME_WIDTH, app_module.STREAM_PROFILES["remote"]["width"]),
+        (app_module.cv2.CAP_PROP_FRAME_HEIGHT, app_module.STREAM_PROFILES["remote"]["height"]),
+        (app_module.cv2.CAP_PROP_FPS, app_module.STREAM_PROFILES["remote"]["fps"]),
+    ]

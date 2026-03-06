@@ -11,10 +11,31 @@ app = Flask(__name__)
 # ── Camera streaming state ──────────────────────────────────────────────────
 _camera_lock = threading.Lock()
 _camera = None
+_current_mode = None
 CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "0"))
 CAMERA_WIDTH = int(os.environ.get("CAMERA_WIDTH", "1920"))
 CAMERA_HEIGHT = int(os.environ.get("CAMERA_HEIGHT", "1080"))
 CAMERA_FPS = int(os.environ.get("CAMERA_FPS", "30"))
+REMOTE_CAMERA_WIDTH = int(os.environ.get("REMOTE_CAMERA_WIDTH", "1280"))
+REMOTE_CAMERA_HEIGHT = int(os.environ.get("REMOTE_CAMERA_HEIGHT", "720"))
+REMOTE_CAMERA_FPS = int(os.environ.get("REMOTE_CAMERA_FPS", "24"))
+LOCAL_JPEG_QUALITY = int(os.environ.get("LOCAL_JPEG_QUALITY", "85"))
+REMOTE_JPEG_QUALITY = int(os.environ.get("REMOTE_JPEG_QUALITY", "50"))
+
+STREAM_PROFILES = {
+    "local": {
+        "width": CAMERA_WIDTH,
+        "height": CAMERA_HEIGHT,
+        "fps": CAMERA_FPS,
+        "quality": LOCAL_JPEG_QUALITY,
+    },
+    "remote": {
+        "width": REMOTE_CAMERA_WIDTH,
+        "height": REMOTE_CAMERA_HEIGHT,
+        "fps": REMOTE_CAMERA_FPS,
+        "quality": REMOTE_JPEG_QUALITY,
+    },
+}
 
 # ── Shutdown safety state ───────────────────────────────────────────────────
 _shutdown_lock = threading.Lock()
@@ -24,27 +45,47 @@ SHUTDOWN_COOLDOWN_SECONDS = int(os.environ.get("SHUTDOWN_COOLDOWN_SECONDS", "30"
 
 def _release_camera():
     """Release the shared camera if it exists."""
-    global _camera
+    global _camera, _current_mode
     with _camera_lock:
         if _camera is not None:
             try:
                 _camera.release()
             finally:
                 _camera = None
+                _current_mode = None
 
 
-def _configure_camera(camera):
-    """Apply preferred camera properties and log when they cannot be set."""
+def _configure_camera(camera, profile):
+    """Apply preferred camera properties for the active stream profile."""
     settings = (
-        (cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH, "width"),
-        (cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT, "height"),
-        (cv2.CAP_PROP_FPS, CAMERA_FPS, "fps"),
+        (cv2.CAP_PROP_BUFFERSIZE, 1, "buffer size"),
+        (cv2.CAP_PROP_FRAME_WIDTH, profile["width"], "width"),
+        (cv2.CAP_PROP_FRAME_HEIGHT, profile["height"], "height"),
+        (cv2.CAP_PROP_FPS, profile["fps"], "fps"),
     )
 
     for prop, value, label in settings:
         applied = camera.set(prop, value)
         if not applied:
             app.logger.warning("Unable to apply camera %s setting: %s", label, value)
+
+
+def _get_stream_mode():
+    """Choose the video stream profile for this request.
+
+    We use the Host header for stream quality selection because remote tunnel
+    traffic may still terminate locally and appear to originate from 127.0.0.1.
+    This helper is only for performance tuning, not authorization.
+    """
+    host = (request.host or "").split(":", 1)[0].strip().lower()
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return "local"
+
+    client_ip = (request.remote_addr or "").strip()
+    if client_ip and client_ip not in _local_addresses():
+        return "remote"
+
+    return "remote" if host else "local"
 
 
 def _local_addresses():
@@ -78,9 +119,11 @@ def _shutdown_request_allowed():
         return True
 
 
-def _get_camera():
-    """Return a shared cv2.VideoCapture instance, opening it on first call."""
-    global _camera
+def _get_camera(mode):
+    """Return a shared camera configured for the requested stream mode."""
+    global _camera, _current_mode
+    profile = STREAM_PROFILES[mode]
+
     with _camera_lock:
         if _camera is None or not _camera.isOpened():
             camera = cv2.VideoCapture(CAMERA_INDEX)
@@ -88,21 +131,39 @@ def _get_camera():
                 if camera is not None:
                     camera.release()
                 raise RuntimeError("Unable to open camera device")
-            _configure_camera(camera)
             _camera = camera
+            _current_mode = None
+
+        if _current_mode != mode:
+            _configure_camera(_camera, profile)
+            _current_mode = mode
+
     return _camera
 
 
-def _generate_mjpeg(cam):
-    """Yield MJPEG frames from the USB webcam indefinitely."""
+def _generate_mjpeg(cam, mode):
+    """Yield MJPEG frames using the requested stream profile."""
+    profile = STREAM_PROFILES[mode]
+    interval = 1.0 / profile["fps"]
+    quality = profile["quality"]
+    last_frame_at = 0.0
+
     while True:
+        now = time.monotonic()
+        if now - last_frame_at < interval:
+            time.sleep(0.005)
+            continue
+
         with _camera_lock:
             ok, frame = cam.read()
+        last_frame_at = now
+
         if not ok:
             app.logger.error("Camera frame capture failed; releasing camera")
             _release_camera()
             break
-        encoded, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+
+        encoded, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
         if not encoded:
             app.logger.error("MJPEG frame encoding failed")
             continue
@@ -146,16 +207,23 @@ def remote():
 @app.route("/video_feed")
 def video_feed():
     """MJPEG stream endpoint consumed by remote.html."""
+    mode = _get_stream_mode()
+
     try:
-        cam = _get_camera()
+        cam = _get_camera(mode)
     except RuntimeError as exc:
         app.logger.error("Unable to start video feed: %s", exc)
         return Response("Camera unavailable", status=503, mimetype="text/plain")
 
-    return Response(
-        _generate_mjpeg(cam),
+    response = Response(
+        _generate_mjpeg(cam, mode),
         mimetype="multipart/x-mixed-replace; boundary=frame",
     )
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")

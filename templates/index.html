@@ -28,8 +28,42 @@
         <p>When you are ready, click the button below to start using the Magnifier.</p>
         <button class="start-btn" id="start-samples-btn" data-samples-url="{{ url_for('samples') }}">Start Magnifier</button>
         <p class="tip">Tip: You can always come back to Home if you need help.</p>
+        <button type="button" class="shutdown-btn" id="shutdown-btn" aria-label="Shut down Raspberry Pi">🔴 Shut Down</button>
     </aside>
 </div>
+
+<script>
+(function() {
+  const SHUTDOWN_TOKEN = "{{ shutdown_token }}";
+
+  async function shutdownPi() {
+    if (!confirm("Are you sure you want to shut down the Raspberry Pi?")) return;
+
+    const btn = document.getElementById("shutdown-btn");
+    btn.disabled = true;
+    btn.textContent = "Shutting down...";
+
+    try {
+      const res = await fetch("/shutdown", {
+        method: "POST",
+        headers: { "X-Shutdown-Token": SHUTDOWN_TOKEN }
+      });
+      if (!res.ok) {
+        btn.disabled = false;
+        btn.textContent = "🔴 Shut Down";
+        alert("Shutdown failed: " + (res.status === 403 ? "Invalid token." : "Server returned " + res.status + "."));
+        return;
+      }
+      btn.textContent = "✅ Shutdown initiated";
+    } catch (e) {
+      // Connection drop is expected as the Pi shuts down
+      btn.textContent = "✅ Shutdown initiated";
+    }
+  }
+
+  document.getElementById("shutdown-btn").addEventListener("click", shutdownPi);
+})();
+</script>
 
 <div id="tab-content-source" hidden>
     {% include "home_tab_content.html" %}

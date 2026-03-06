@@ -1,17 +1,27 @@
 import os
+import base64
 import socket
 import subprocess
 import time
 import cv2
 import threading
-from flask import Flask, render_template, request, Response
+from flask import Flask, render_template, request
+from flask_socketio import SocketIO
 
 app = Flask(__name__)
+socketio = SocketIO(
+    app,
+    async_mode=os.environ.get("SOCKETIO_ASYNC_MODE", "threading"),
+    cors_allowed_origins="*",
+)
 
 # ── Camera streaming state ──────────────────────────────────────────────────
 _camera_lock = threading.Lock()
 _camera = None
 _current_mode = None
+_stream_state_lock = threading.Lock()
+_stream_client_modes = {}
+_stream_thread = None
 CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "0"))
 CAMERA_WIDTH = int(os.environ.get("CAMERA_WIDTH", "1920"))
 CAMERA_HEIGHT = int(os.environ.get("CAMERA_HEIGHT", "1080"))
@@ -86,6 +96,16 @@ def _get_stream_mode():
         return "remote"
 
     return "remote" if host else "local"
+
+
+def _get_active_stream_mode():
+    """Prefer remote mode when any remote viewer is connected."""
+    with _stream_state_lock:
+        if not _stream_client_modes:
+            return None
+        if "remote" in _stream_client_modes.values():
+            return "remote"
+        return "local"
 
 
 def _local_addresses():
@@ -173,6 +193,64 @@ def _generate_mjpeg(cam, mode):
         )
 
 
+def _stream_frames():
+    """Capture frames and emit them to connected Socket.IO stream clients."""
+    global _stream_thread
+
+    while True:
+        mode = _get_active_stream_mode()
+        if mode is None:
+            with _stream_state_lock:
+                _stream_thread = None
+            return
+
+        profile = STREAM_PROFILES[mode]
+        interval = 1.0 / profile["fps"]
+        quality = profile["quality"]
+        started_at = time.monotonic()
+
+        try:
+            cam = _get_camera(mode)
+        except RuntimeError as exc:
+            app.logger.error("Unable to start websocket stream: %s", exc)
+            socketio.emit(
+                "stream_status",
+                {"state": "error", "message": "Camera unavailable"},
+                namespace="/stream",
+            )
+            socketio.sleep(1.0)
+            continue
+
+        with _camera_lock:
+            ok, frame = cam.read()
+
+        if not ok:
+            app.logger.error("Camera frame capture failed; releasing camera")
+            _release_camera()
+            socketio.emit(
+                "stream_status",
+                {"state": "error", "message": "Camera unavailable"},
+                namespace="/stream",
+            )
+            socketio.sleep(0.25)
+            continue
+
+        encoded, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        if not encoded:
+            app.logger.error("WebSocket frame encoding failed")
+            socketio.sleep(0)
+            continue
+
+        socketio.emit(
+            "frame",
+            {"data": base64.b64encode(jpeg.tobytes()).decode("utf-8")},
+            namespace="/stream",
+        )
+
+        elapsed = time.monotonic() - started_at
+        socketio.sleep(max(0, interval - elapsed))
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -204,27 +282,24 @@ def remote():
     return render_template("remote.html")
 
 
-@app.route("/video_feed")
-def video_feed():
-    """MJPEG stream endpoint consumed by remote.html."""
+@socketio.on("connect", namespace="/stream")
+def stream_connect():
+    """Track stream clients and start the background emitter on first connect."""
+    global _stream_thread
+
     mode = _get_stream_mode()
+    with _stream_state_lock:
+        _stream_client_modes[request.sid] = mode
+        if _stream_thread is None:
+            _stream_thread = socketio.start_background_task(_stream_frames)
 
-    try:
-        cam = _get_camera(mode)
-    except RuntimeError as exc:
-        app.logger.error("Unable to start video feed: %s", exc)
-        return Response("Camera unavailable", status=503, mimetype="text/plain")
 
-    response = Response(
-        _generate_mjpeg(cam, mode),
-        mimetype="multipart/x-mixed-replace; boundary=frame",
-    )
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    response.headers["X-Accel-Buffering"] = "no"
-    return response
+@socketio.on("disconnect", namespace="/stream")
+def stream_disconnect():
+    """Remove stream clients; the emitter exits when none remain."""
+    with _stream_state_lock:
+        _stream_client_modes.pop(request.sid, None)
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
-    app.run(debug=debug)
+    socketio.run(app, debug=debug, host="0.0.0.0", port=5000)

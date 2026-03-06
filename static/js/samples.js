@@ -1,7 +1,10 @@
 const videoElement = document.getElementById('video');
 const remoteStreamElement = document.getElementById('stream-img');
-const viewerElement = videoElement || remoteStreamElement;
+const remoteCanvasElement = document.getElementById('stream-canvas');
+const remoteCanvasContext = remoteCanvasElement?.getContext('2d') ?? null;
+const viewerElement = videoElement || remoteStreamElement || remoteCanvasElement;
 const isRemoteStreamMode = !videoElement && !!remoteStreamElement;
+const isRemoteCanvasMode = !videoElement && !!remoteCanvasElement;
 const videoContainer = document.getElementById('video-container');
 const menu = document.getElementById('menu');
 const zoomSlider = document.getElementById('zoom-slider');
@@ -125,6 +128,59 @@ function setCanvasToVideoSize(canvas, videoEl, scale = 1.0) {
   // CSS size (how big the canvas appears on the page) — match layout to preserve appearance
   canvas.style.width = `${Math.round(videoPixelW)}px`;
   canvas.style.height = `${Math.round(videoPixelH)}px`;
+}
+
+function resizeRemoteCanvas() {
+  if (!remoteCanvasElement) return;
+  remoteCanvasElement.width = window.innerWidth;
+  remoteCanvasElement.height = window.innerHeight;
+}
+
+function updateRemoteStatus(text, color = '#aaa', borderColor = '#555') {
+  const badge = document.getElementById('status-badge');
+  if (!badge) return;
+  badge.textContent = text;
+  badge.style.color = color;
+  badge.style.borderColor = borderColor;
+}
+
+function initializeRemoteSocketStream() {
+  if (!remoteCanvasElement || !remoteCanvasContext || typeof window.io !== 'function') {
+    updateRemoteStatus('Streaming unavailable', '#ff6b6b', '#ff6b6b');
+    return;
+  }
+
+  resizeRemoteCanvas();
+  window.addEventListener('resize', resizeRemoteCanvas);
+
+  const socket = window.io('/stream', {
+    transports: ['websocket'],
+    reconnectionDelay: 1000,
+    reconnectionAttempts: Infinity,
+  });
+  const frameImage = new Image();
+
+  socket.on('connect', () => {
+    updateRemoteStatus('Connected', '#ffd700', '#ffd700');
+  });
+
+  socket.on('disconnect', () => {
+    updateRemoteStatus('Reconnecting...', '#aaa', '#555');
+  });
+
+  socket.on('stream_status', (payload) => {
+    if (payload?.state === 'error') {
+      updateRemoteStatus(payload.message || 'Camera unavailable', '#ff6b6b', '#ff6b6b');
+    }
+  });
+
+  socket.on('frame', (payload) => {
+    frameImage.onload = () => {
+      remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+      remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+    };
+    frameImage.src = `data:image/jpeg;base64,${payload.data}`;
+  });
 }
 
 /* Camera is started once in the async IIFE below; no duplicate DOMContentLoaded start here. */
@@ -313,6 +369,12 @@ function applyFilter(filter) {
 }
 
 (async () => {
+    if (isRemoteCanvasMode) {
+        applyTransform();
+        initializeRemoteSocketStream();
+        return;
+    }
+
     if (isRemoteStreamMode) {
         applyTransform();
         return;

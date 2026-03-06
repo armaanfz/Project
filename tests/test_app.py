@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 import app as app_module
-from app import app
+from app import app, socketio
 
 
 @pytest.fixture
@@ -16,6 +16,8 @@ def client():
 @pytest.fixture(autouse=True)
 def reset_shutdown_state(monkeypatch):
     monkeypatch.setattr(app_module, "_last_shutdown_request_at", 0.0)
+    monkeypatch.setattr(app_module, "_stream_client_modes", {})
+    monkeypatch.setattr(app_module, "_stream_thread", None)
 
 
 def test_home_returns_200(client):
@@ -36,41 +38,44 @@ def test_remote_returns_200_and_includes_remote_controls(client):
     assert response.status_code == 200
     assert b"Access Remote Stream" not in response.data
     assert b"Live \xe2\x80\x93 Remote View" in response.data
+    assert b"stream-canvas" in response.data
+    assert b"socket.io.min.js" in response.data
     assert b"Tutorial" in response.data
     assert b"Reset Zoom" in response.data
     assert b"Mask" in response.data
 
 
-def test_video_feed_uses_local_profile_for_localhost(client, monkeypatch):
-    camera = object()
-    get_camera_mock = Mock(return_value=camera)
-    generate_mock = Mock(return_value=iter([b"frame"]))
-
-    monkeypatch.setattr(app_module, "_get_camera", get_camera_mock)
-    monkeypatch.setattr(app_module, "_generate_mjpeg", generate_mock)
-
-    response = client.get("/video_feed", base_url="http://localhost")
-
-    assert response.status_code == 200
-    get_camera_mock.assert_called_once_with("local")
-    generate_mock.assert_called_once_with(camera, "local")
-    assert response.headers["X-Accel-Buffering"] == "no"
-    assert response.headers["Cache-Control"] == "no-cache, no-store, must-revalidate"
+def test_get_stream_mode_uses_localhost_for_local_requests():
+    with app.test_request_context("/stream", base_url="http://localhost"):
+        assert app_module._get_stream_mode() == "local"
 
 
-def test_video_feed_uses_remote_profile_for_non_local_host(client, monkeypatch):
-    camera = object()
-    get_camera_mock = Mock(return_value=camera)
-    generate_mock = Mock(return_value=iter([b"frame"]))
+def test_get_stream_mode_uses_remote_for_non_local_host():
+    with app.test_request_context("/stream", base_url="http://magnifier.example.com"):
+        assert app_module._get_stream_mode() == "remote"
 
-    monkeypatch.setattr(app_module, "_get_camera", get_camera_mock)
-    monkeypatch.setattr(app_module, "_generate_mjpeg", generate_mock)
 
-    response = client.get("/video_feed", base_url="http://magnifier.example.com")
+def test_socket_connect_starts_background_task(monkeypatch):
+    background_task = object()
+    start_task_mock = Mock(return_value=background_task)
+    monkeypatch.setattr(app_module.socketio, "start_background_task", start_task_mock)
 
-    assert response.status_code == 200
-    get_camera_mock.assert_called_once_with("remote")
-    generate_mock.assert_called_once_with(camera, "remote")
+    client = socketio.test_client(app, namespace="/stream")
+
+    assert client.is_connected("/stream")
+    assert len(app_module._stream_client_modes) == 1
+    start_task_mock.assert_called_once_with(app_module._stream_frames)
+    client.disconnect(namespace="/stream")
+
+
+def test_socket_disconnect_removes_client(monkeypatch):
+    monkeypatch.setattr(app_module.socketio, "start_background_task", Mock(return_value=object()))
+
+    client = socketio.test_client(app, namespace="/stream")
+
+    assert len(app_module._stream_client_modes) == 1
+    client.disconnect(namespace="/stream")
+    assert app_module._stream_client_modes == {}
 
 
 def test_home_tab_content_returns_200(client):
@@ -110,13 +115,14 @@ def test_shutdown_rate_limit_returns_429(monkeypatch, client):
     assert response_two.status_code == 429
 
 
-def test_video_feed_returns_503_when_camera_unavailable(monkeypatch, client):
-    monkeypatch.setattr(app_module, "_get_camera", Mock(side_effect=RuntimeError("camera missing")))
+def test_active_stream_mode_prefers_remote_clients():
+    app_module._stream_client_modes = {"a": "local", "b": "remote"}
+    assert app_module._get_active_stream_mode() == "remote"
 
-    response = client.get("/video_feed")
 
-    assert response.status_code == 503
-    assert response.data == b"Camera unavailable"
+def test_active_stream_mode_returns_none_without_clients():
+    app_module._stream_client_modes = {}
+    assert app_module._get_active_stream_mode() is None
 
 
 def test_generate_mjpeg_releases_camera_on_read_failure(monkeypatch):

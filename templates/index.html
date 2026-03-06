@@ -34,8 +34,6 @@
 
 <script>
 (function() {
-  const SHUTDOWN_TOKEN = "{{ shutdown_token }}";
-
   async function shutdownPi() {
     if (!confirm("Are you sure you want to shut down the Raspberry Pi?")) return;
 
@@ -45,19 +43,24 @@
 
     try {
       const res = await fetch("/shutdown", {
-        method: "POST",
-        headers: { "X-Shutdown-Token": SHUTDOWN_TOKEN }
+        method: "POST"
       });
       if (!res.ok) {
         btn.disabled = false;
-        btn.textContent = "🔴 Shut Down";
-        alert("Shutdown failed: " + (res.status === 403 ? "Invalid token." : "Server returned " + res.status + "."));
+        btn.textContent = "Shut Down";
+        const message = res.status === 403
+          ? "Shutdown is only available from the Raspberry Pi itself."
+          : res.status === 429
+            ? "Shutdown was requested recently. Please wait a moment and try again."
+            : "Server returned " + res.status + ".";
+        alert("Shutdown failed: " + message);
         return;
       }
       btn.textContent = "✅ Shutdown initiated";
     } catch (e) {
-      // Connection drop is expected as the Pi shuts down
-      btn.textContent = "✅ Shutdown initiated";
+      btn.disabled = false;
+      btn.textContent = "Shut Down";
+      alert("Shutdown failed: unable to reach the server.");
     }
   }
 

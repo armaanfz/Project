@@ -2,16 +2,31 @@ import os
 import base64
 import socket
 import subprocess
+import sys
 import time
 import cv2
 import threading
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO
 
+
+def _default_socketio_async_mode():
+    """Choose a safer default async backend for the current platform.
+
+    gevent is a good production fit for Linux/Raspberry Pi deployments, but it
+    can be unstable in this project's current Windows development environment.
+    Allow an explicit env override, otherwise default to threading on Windows
+    and gevent elsewhere.
+    """
+    configured = os.environ.get("SOCKETIO_ASYNC_MODE", "").strip().lower()
+    if configured:
+        return configured
+    return "threading" if sys.platform.startswith("win") else "gevent"
+
 app = Flask(__name__)
 socketio = SocketIO(
     app,
-    async_mode=os.environ.get("SOCKETIO_ASYNC_MODE", "threading"),
+    async_mode=_default_socketio_async_mode(),
     cors_allowed_origins="*",
 )
 

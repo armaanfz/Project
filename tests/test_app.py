@@ -37,7 +37,7 @@ def test_remote_returns_200_and_includes_remote_controls(client):
 
     assert response.status_code == 200
     assert b"Access Remote Stream" not in response.data
-    assert b"Live \xe2\x80\x93 Remote View" in response.data
+    assert b"Remote Feed - Connecting..." in response.data
     assert b"stream-canvas" in response.data
     assert b"socket.io.min.js" in response.data
     assert b"Tutorial" in response.data
@@ -76,6 +76,49 @@ def test_socket_disconnect_removes_client(monkeypatch):
     assert len(app_module._stream_client_modes) == 1
     client.disconnect(namespace="/stream")
     assert app_module._stream_client_modes == {}
+
+
+def test_remove_stream_client_schedules_release_when_last_client_leaves(monkeypatch):
+    scheduled = {"called": False}
+    app_module._stream_client_modes = {"abc123": "remote"}
+
+    monkeypatch.setattr(app_module, "_schedule_camera_release", lambda: scheduled.__setitem__("called", True))
+
+    removed = app_module._remove_stream_client("abc123")
+
+    assert removed is True
+    assert app_module._stream_client_modes == {}
+    assert scheduled["called"] is True
+
+
+def test_remove_stream_client_returns_false_for_unknown_sid(monkeypatch):
+    monkeypatch.setattr(app_module, "_schedule_camera_release", Mock())
+
+    removed = app_module._remove_stream_client("missing")
+
+    assert removed is False
+
+
+def test_stream_frames_emits_latency_timestamp(monkeypatch):
+    class FakeCamera:
+        def read(self):
+            return True, object()
+
+    emitted = []
+    sleeps = []
+    active_modes = iter(["remote", None])
+
+    monkeypatch.setattr(app_module, "_get_active_stream_mode", lambda: next(active_modes))
+    monkeypatch.setattr(app_module, "_get_camera", lambda mode: FakeCamera())
+    monkeypatch.setattr(app_module.cv2, "imencode", lambda *_args, **_kwargs: (True, Mock(tobytes=lambda: b"jpeg")))
+    monkeypatch.setattr(app_module.socketio, "emit", lambda event, payload, namespace=None: emitted.append((event, payload, namespace)))
+    monkeypatch.setattr(app_module.socketio, "sleep", lambda seconds: sleeps.append(seconds))
+
+    app_module._stream_frames()
+
+    frame_events = [event for event in emitted if event[0] == "frame"]
+    assert len(frame_events) == 1
+    assert "server_ts_ms" in frame_events[0][1]
 
 
 def test_home_tab_content_returns_200(client):

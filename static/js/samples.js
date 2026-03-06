@@ -137,11 +137,18 @@ function resizeRemoteCanvas() {
 }
 
 function updateRemoteStatus(text, color = '#aaa', borderColor = '#555') {
-  const badge = document.getElementById('status-badge');
+  const badge = document.getElementById('remote-status-badge');
   if (!badge) return;
   badge.textContent = text;
   badge.style.color = color;
   badge.style.borderColor = borderColor;
+}
+
+function formatRemoteStatus(baseText, latencyMs = null) {
+  if (typeof latencyMs !== 'number' || Number.isNaN(latencyMs)) {
+    return baseText;
+  }
+  return `${baseText} (${Math.max(0, Math.round(latencyMs))}ms)`;
 }
 
 function initializeRemoteSocketStream() {
@@ -157,30 +164,86 @@ function initializeRemoteSocketStream() {
     transports: ['websocket'],
     reconnectionDelay: 1000,
     reconnectionAttempts: Infinity,
+    closeOnBeforeunload: true,
   });
   const frameImage = new Image();
+  const remoteStatusState = {
+    baseText: 'Remote Feed - Connecting...',
+    color: '#ff6b6b',
+    borderColor: '#ff6b6b',
+    latencyMs: null,
+  };
+
+  window.remoteStreamSocket = socket;
+
+  function renderRemoteStatus() {
+    updateRemoteStatus(
+      formatRemoteStatus(remoteStatusState.baseText, remoteStatusState.latencyMs),
+      remoteStatusState.color,
+      remoteStatusState.borderColor,
+    );
+  }
 
   socket.on('connect', () => {
-    updateRemoteStatus('Connected', '#ffd700', '#ffd700');
+    remoteStatusState.baseText = 'Remote Feed - Connected';
+    remoteStatusState.color = '#7CFC00';
+    remoteStatusState.borderColor = '#7CFC00';
+    remoteStatusState.latencyMs = null;
+    renderRemoteStatus();
   });
 
   socket.on('disconnect', () => {
-    updateRemoteStatus('Reconnecting...', '#aaa', '#555');
+    remoteStatusState.baseText = 'Remote Feed - Reconnecting...';
+    remoteStatusState.color = '#ff6b6b';
+    remoteStatusState.borderColor = '#ff6b6b';
+    remoteStatusState.latencyMs = null;
+    renderRemoteStatus();
   });
 
   socket.on('stream_status', (payload) => {
     if (payload?.state === 'error') {
-      updateRemoteStatus(payload.message || 'Camera unavailable', '#ff6b6b', '#ff6b6b');
+      remoteStatusState.baseText = `Remote Feed - ${payload.message || 'Camera unavailable'}`;
+      remoteStatusState.color = '#ff6b6b';
+      remoteStatusState.borderColor = '#ff6b6b';
+      remoteStatusState.latencyMs = null;
+      renderRemoteStatus();
     }
   });
 
   socket.on('frame', (payload) => {
+    if (typeof payload?.server_ts_ms === 'number') {
+      remoteStatusState.baseText = 'Remote Feed - Connected';
+      remoteStatusState.color = '#7CFC00';
+      remoteStatusState.borderColor = '#7CFC00';
+      remoteStatusState.latencyMs = Date.now() - payload.server_ts_ms;
+      renderRemoteStatus();
+    }
+
     frameImage.onload = () => {
       remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
       remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
     };
     frameImage.src = `data:image/jpeg;base64,${payload.data}`;
   });
+}
+
+function stopRemoteSocketStream() {
+  if (window.remoteStreamSocket && typeof window.remoteStreamSocket.disconnect === 'function') {
+    window.remoteStreamSocket.disconnect();
+    window.remoteStreamSocket = null;
+  }
+}
+
+function stopLocalCameraStream() {
+  if (videoElement?.srcObject && typeof videoElement.srcObject.getTracks === 'function') {
+    videoElement.srcObject.getTracks().forEach((track) => track.stop());
+    videoElement.srcObject = null;
+  }
+}
+
+function cleanupViewerResources() {
+  stopLocalCameraStream();
+  stopRemoteSocketStream();
 }
 
 /* Camera is started once in the async IIFE below; no duplicate DOMContentLoaded start here. */
@@ -387,18 +450,9 @@ function applyFilter(filter) {
 
     try {
         // startCamera will set videoElement.srcObject and wait for loadedmetadata
-        const stream = await startCamera(videoElement, { preferExact1080: false });
+        await startCamera(videoElement, { preferExact1080: false });
 
         // Stop camera when leaving the page (e.g. Back button) so the camera LED turns off
-        function stopCameraStream() {
-            if (videoElement.srcObject && typeof videoElement.srcObject.getTracks === 'function') {
-                videoElement.srcObject.getTracks().forEach((t) => t.stop());
-                videoElement.srcObject = null;
-            }
-        }
-        window.addEventListener('pagehide', stopCameraStream);
-        window.addEventListener('beforeunload', stopCameraStream);
-
         // Optional: after camera starts, align any overlay / processing canvases to the native video pixels
         const overlayIds = ['overlay-canvas', 'tritanopia-overlay-canvas'];
         overlayIds.forEach(id => {
@@ -599,8 +653,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Back button function
 function goHome() {
+    cleanupViewerResources();
     window.location.href = "/";
 }
+
+window.addEventListener('pagehide', cleanupViewerResources);
+window.addEventListener('beforeunload', cleanupViewerResources);
 /* ---------- Robust letterbox mask (top + bottom bars) feature ----------
    Drop this whole block into samples.js after videoElement / video-container are defined.
    It will create missing UI if needed and ensures the mask canvas is inserted under UI.

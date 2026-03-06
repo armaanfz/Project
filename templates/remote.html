@@ -20,30 +20,16 @@
             transition: transform 0.3s ease;
         }
 
-        #remote-badge {
+        #remote-status-badge {
             position: fixed;
             top: 20px;
             right: 20px;
             background: rgba(0,0,0,0.7);
-            color: #ffd700;
-            border: 1px solid #ffd700;
+            color: #7CFC00;
+            border: 1px solid #7CFC00;
             border-radius: 8px;
             padding: 6px 14px;
             font-size: 14px;
-            z-index: 300;
-            pointer-events: none;
-        }
-
-        #status-badge {
-            position: fixed;
-            top: 60px;
-            right: 20px;
-            background: rgba(0,0,0,0.7);
-            color: #aaa;
-            border: 1px solid #555;
-            border-radius: 8px;
-            padding: 4px 12px;
-            font-size: 12px;
             z-index: 300;
             pointer-events: none;
         }
@@ -78,8 +64,7 @@
     </svg>
 
     <button class="btn" id="back-btn" aria-label="Back to Magnifier home">⟵ Back</button>
-    <span id="remote-badge">Live – Remote View</span>
-    <span id="status-badge">Connecting...</span>
+    <span id="remote-status-badge">Remote Feed - Connecting...</span>
 
     <div id="video-container">
         <canvas id="stream-canvas" aria-label="Live camera stream from Raspberry Pi"></canvas>

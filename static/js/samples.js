@@ -586,6 +586,7 @@ function _ensureMaskUIExists() {
   if (!maskControls && videoContainer) {
     maskControls = document.createElement('div');
     maskControls.id = 'mask-controls';
+    // Fix 3: start hidden; enableBarsMask / disableBarsMask manage visibility
     maskControls.style.display = 'none';
     maskControls.style.position = 'absolute';
     maskControls.style.bottom = '80px';
@@ -596,7 +597,6 @@ function _ensureMaskUIExists() {
     maskControls.style.background = 'rgba(0,0,0,0.56)';
     maskControls.style.borderRadius = '10px';
     maskControls.style.gap = '8px';
-    maskControls.style.display = 'flex';
     videoContainer.appendChild(maskControls);
   }
 
@@ -900,13 +900,12 @@ document.addEventListener('DOMContentLoaded', () => {
       before: () => document.getElementById("menu")?.classList.add("active")
     },
     {
+      // Fix 2: target changed from ".custom-slider-col" to null so renderStep does not
+      // overwrite the multi-element highlight that before() sets via highlightMultiple.
       text: "These sliders adjust brightness and contrast.",
-      target: ".custom-slider-col",
+      target: null,
       before: () => {
-        // Ensure filters menu is open
         document.getElementById("menu")?.classList.add("active");
-
-        // Highlight ALL filter sliders together
         requestAnimationFrame(() => {
           highlightMultiple([".custom-slider-col"]);
         });
@@ -916,7 +915,6 @@ document.addEventListener('DOMContentLoaded', () => {
       text: "This is the Mask button. It hides parts of the screen.",
       target: "#mask-btn",
       before: () => {
-        // Enable masking if not already enabled
         if (typeof enableBarsMask === "function") {
           enableBarsMask();
         } else if (typeof toggleBarsMask === "function") {
@@ -928,7 +926,6 @@ document.addEventListener('DOMContentLoaded', () => {
       text: "This slider controls how much is hidden.",
       target: "#mask-controls",
       before: () => {
-        // Ensure mask is enabled before showing controls
         if (typeof enableBarsMask === "function") {
           enableBarsMask();
         } else if (typeof toggleBarsMask === "function") {

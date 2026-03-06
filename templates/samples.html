@@ -44,7 +44,8 @@
     </svg>
     <button class="btn" id="back-btn" aria-label="Back to Magnifier home">⟵ Back</button>
     <div id="video-container">
-        <video id="video" src="" autoplay playsinline muted aria-label="Live camera view"></video>
+        <!-- Fix 1: removed src="" to prevent browser treating current URL as a video source -->
+        <video id="video" autoplay playsinline muted aria-label="Live camera view"></video>
         
         <div id="controls">
             <button class="btn" id="tutorial-btn" aria-label="Start tutorial">Tutorial</button>
@@ -67,7 +68,8 @@
         </div>
     </div>
 
-    <div id="menu" class="hidden">
+    <!-- Fix 5: removed class="hidden" which had no effect (no matching CSS rule exists) -->
+    <div id="menu">
         <div id="filter-list">
             <h3>Predefined Filters</h3>
             <div class="scrollable">

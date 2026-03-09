@@ -69,6 +69,21 @@ _shutdown_lock = threading.Lock()
 _last_shutdown_request_at = 0.0
 SHUTDOWN_COOLDOWN_SECONDS = int(os.environ.get("SHUTDOWN_COOLDOWN_SECONDS", "30"))
 
+# ── Local address cache ─────────────────────────────────────────────────────
+# Computed once at startup to avoid a DNS lookup on every request.
+def _compute_local_addresses():
+    """Return the set of IP addresses that belong to this machine."""
+    addresses = {"127.0.0.1", "::1"}
+    try:
+        hostname = socket.gethostname()
+        _, _, host_addresses = socket.gethostbyname_ex(hostname)
+        addresses.update(host_addresses)
+    except OSError:
+        app.logger.debug("Unable to resolve host addresses for local request check")
+    return frozenset(addresses)
+
+_LOCAL_ADDRESSES = _compute_local_addresses()
+
 
 def _release_camera():
     """Release the shared camera if it exists."""
@@ -142,7 +157,7 @@ def _get_stream_mode():
         return "local"
 
     client_ip = (request.remote_addr or "").strip()
-    if client_ip and client_ip not in _local_addresses():
+    if client_ip and client_ip not in _LOCAL_ADDRESSES:
         return "remote"
 
     return "remote" if host else "local"
@@ -171,24 +186,10 @@ def _remove_stream_client(sid):
     return removed
 
 
-def _local_addresses():
-    """Return IP addresses that should be treated as local to this machine."""
-    addresses = {"127.0.0.1", "::1"}
-
-    try:
-        hostname = socket.gethostname()
-        _, _, host_addresses = socket.gethostbyname_ex(hostname)
-        addresses.update(host_addresses)
-    except OSError:
-        app.logger.debug("Unable to resolve host addresses for local request check")
-
-    return addresses
-
-
 def _is_local_request():
     """Allow only requests originating from this device."""
     client_ip = (request.remote_addr or "").strip()
-    return client_ip in _local_addresses()
+    return client_ip in _LOCAL_ADDRESSES
 
 
 def _shutdown_request_allowed():
@@ -224,38 +225,6 @@ def _get_camera(mode):
     return _camera
 
 
-def _generate_mjpeg(cam, mode):
-    """Yield MJPEG frames using the requested stream profile."""
-    profile = STREAM_PROFILES[mode]
-    interval = 1.0 / profile["fps"]
-    quality = profile["quality"]
-    last_frame_at = 0.0
-
-    while True:
-        now = time.monotonic()
-        if now - last_frame_at < interval:
-            time.sleep(0.005)
-            continue
-
-        with _camera_lock:
-            ok, frame = cam.read()
-        last_frame_at = now
-
-        if not ok:
-            app.logger.error("Camera frame capture failed; releasing camera")
-            _release_camera()
-            break
-
-        encoded, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
-        if not encoded:
-            app.logger.error("MJPEG frame encoding failed")
-            continue
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
-        )
-
-
 def _stream_frames():
     """Capture frames and emit them to connected Socket.IO stream clients."""
     global _stream_thread
@@ -264,6 +233,10 @@ def _stream_frames():
         mode = _get_active_stream_mode()
         if mode is None:
             with _stream_state_lock:
+                # Re-check inside the lock: a new client may have connected
+                # between the _get_active_stream_mode() call above and now.
+                if _stream_client_modes:
+                    continue
                 _stream_thread = None
             return
 
@@ -327,10 +300,14 @@ def shutdown():
         return "Forbidden", 403
     if not _shutdown_request_allowed():
         return "Too Many Requests", 429
-    # Close Chromium gracefully before shutting down (Raspberry Pi default browser)
-    subprocess.run(["pkill", "chromium"], capture_output=True)
-    time.sleep(2)
-    subprocess.Popen(["sudo", "shutdown", "-h", "now"])
+
+    def _do_shutdown():
+        # Close Chromium gracefully before shutting down (Raspberry Pi default browser)
+        subprocess.run(["pkill", "chromium"], capture_output=True)
+        time.sleep(2)
+        subprocess.Popen(["sudo", "shutdown", "-h", "now"])
+
+    threading.Thread(target=_do_shutdown, daemon=True).start()
     return "Shutting down...", 200
 
 @app.route("/home-tab-content")
@@ -346,6 +323,7 @@ def samples():
 def remote():
     """Remote viewer page — shows the Pi's camera stream."""
     return render_template("remote.html")
+
 @socketio.on("connect", namespace="/stream")
 def stream_connect():
     """Track stream clients and start the background emitter on first connect."""
@@ -366,4 +344,4 @@ def stream_disconnect():
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
-    socketio.run(app, debug=debug, host="0.0.0.0", port=5000)
+    socketio.run(app, debug=debug, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)

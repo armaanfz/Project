@@ -8,32 +8,6 @@
     <title>Magnifier – Remote View</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/samples.css') }}">
-    <style>
-        #stream-canvas {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(1);
-            transform-origin: center center;
-            width: 100vw;
-            height: 100vh;
-            transition: transform 0.3s ease;
-        }
-
-        #remote-status-badge {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.7);
-            color: #7CFC00;
-            border: 1px solid #7CFC00;
-            border-radius: 8px;
-            padding: 6px 14px;
-            font-size: 14px;
-            z-index: 300;
-            pointer-events: none;
-        }
-    </style>
 </head>
 
 <body>

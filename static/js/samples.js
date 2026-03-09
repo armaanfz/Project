@@ -1,10 +1,12 @@
 const videoElement = document.getElementById('video');
-const remoteStreamElement = document.getElementById('stream-img');
 const remoteCanvasElement = document.getElementById('stream-canvas');
 const remoteCanvasContext = remoteCanvasElement?.getContext('2d') ?? null;
-const viewerElement = videoElement || remoteStreamElement || remoteCanvasElement;
-const isRemoteStreamMode = !videoElement && !!remoteStreamElement;
+const viewerElement = videoElement || remoteCanvasElement;
 const isRemoteCanvasMode = !videoElement && !!remoteCanvasElement;
+
+// WeakSet used by _ensureMaskUIExists to track which mask buttons already have
+// their event listener attached, without polluting DOM element properties.
+const _barsMaskHookedButtons = new WeakSet();
 const videoContainer = document.getElementById('video-container');
 const menu = document.getElementById('menu');
 const zoomSlider = document.getElementById('zoom-slider');
@@ -291,6 +293,7 @@ videoContainer.addEventListener('touchstart', (e) => {
 
 videoContainer.addEventListener('touchmove', (e) => {
     if (isDragging) {
+        e.preventDefault(); // prevent page scroll from conflicting with pan gesture
         const dx = e.touches[0].clientX - startX;
         const dy = e.touches[0].clientY - startY;
 
@@ -302,7 +305,7 @@ videoContainer.addEventListener('touchmove', (e) => {
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
     }
-});
+}, { passive: false });
 
 videoContainer.addEventListener('touchend', () => {
     isDragging = false;
@@ -371,7 +374,6 @@ function adjustZoom() {
 
 // Change zoom via + / - buttons by delta (e.g., 0.1)
 function changeZoom(delta) {
-    const zoomSlider = document.getElementById('zoom-slider');
     const resetBtn = document.getElementById('reset-btn');
     if (!zoomSlider) return;
 
@@ -435,11 +437,6 @@ function applyFilter(filter) {
     if (isRemoteCanvasMode) {
         applyTransform();
         initializeRemoteSocketStream();
-        return;
-    }
-
-    if (isRemoteStreamMode) {
-        applyTransform();
         return;
     }
 
@@ -757,9 +754,9 @@ function _ensureMaskUIExists() {
 
   // Hook button events if not hooked
   maskBtn = document.getElementById('mask-btn');
-  if (maskBtn && !maskBtn._barsMaskHooked) {
+  if (maskBtn && !_barsMaskHookedButtons.has(maskBtn)) {
     maskBtn.addEventListener('click', () => toggleBarsMask());
-    maskBtn._barsMaskHooked = true;
+    _barsMaskHookedButtons.add(maskBtn);
   }
 }
 
@@ -976,17 +973,12 @@ function updateMaskInvertButton() {
 function setupBarsMaskFeature() {
   try {
     _ensureMaskUIExists();
-    // ensure slider event already wired by _ensureMaskUIExists, but double-check:
+    // Sync slider attributes with current state (listener already wired by _ensureMaskUIExists).
     const radiusEl = document.getElementById('mask-radius');
     if (radiusEl) {
       radiusEl.min = '0';
       radiusEl.max = '48';
       radiusEl.value = String(_barsMaskState.barPct || 5);
-
-      radiusEl.addEventListener('input', (e) => {
-        _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
-        drawBarsMask();
-      });
     }
   } catch (err) {
     console.warn('setupBarsMaskFeature error', err);

@@ -46,6 +46,11 @@
             <input type="color" id="accent-picker" value="#ffd700" aria-label="Choose theme accent colour">
             <button type="button" id="accent-reset-btn" class="accent-reset-btn" aria-label="Reset theme colour to default">Reset</button>
         </div>
+        <div id="tunnel-box" aria-live="polite">
+            <p class="tunnel-label">Remote Access URL</p>
+            <p id="tunnel-url-text">Starting tunnel...</p>
+            <button type="button" id="tunnel-copy-btn" style="display:none" aria-label="Copy remote access URL">Copy URL</button>
+        </div>
         <button type="button" class="shutdown-btn" id="shutdown-btn" aria-label="Shut down Raspberry Pi">Shut Down</button>
     </aside>
 </div>
@@ -83,6 +88,41 @@
   }
 
   document.getElementById("shutdown-btn").addEventListener("click", shutdownPi);
+})();
+
+(function() {
+  var tunnelUrlText = document.getElementById('tunnel-url-text');
+  var tunnelCopyBtn = document.getElementById('tunnel-copy-btn');
+
+  function pollTunnel() {
+    fetch('/tunnel-status')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.status === 'ready') {
+          tunnelUrlText.innerHTML = '<a href="' + data.url + '" target="_blank" rel="noopener noreferrer">' + data.url + '</a>';
+          tunnelCopyBtn.style.display = 'block';
+        } else if (data.status === 'error') {
+          tunnelUrlText.textContent = 'Tunnel unavailable';
+        } else {
+          setTimeout(pollTunnel, 2000);
+        }
+      })
+      .catch(function() {
+        setTimeout(pollTunnel, 2000);
+      });
+  }
+
+  tunnelCopyBtn.addEventListener('click', function() {
+    var anchor = tunnelUrlText.querySelector('a');
+    if (anchor) {
+      navigator.clipboard.writeText(anchor.href).then(function() {
+        tunnelCopyBtn.textContent = 'Copied!';
+        setTimeout(function() { tunnelCopyBtn.textContent = 'Copy URL'; }, 1500);
+      });
+    }
+  });
+
+  pollTunnel();
 })();
 </script>
 

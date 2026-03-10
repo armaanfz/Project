@@ -1,4 +1,5 @@
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -21,6 +22,48 @@ def _default_socketio_async_mode():
     if configured:
         return configured
     return "threading" if sys.platform.startswith("win") else "gevent"
+
+# ── Cloudflare tunnel state ──────────────────────────────────────────────────
+_tunnel_url    = None
+_tunnel_status = 'starting'
+_tunnel_lock   = threading.Lock()
+
+_CF_URL_RE = re.compile(r'https://\S+\.trycloudflare\.com')
+
+
+def _start_tunnel():
+    """Launch a Cloudflare quick tunnel and parse the assigned URL."""
+    global _tunnel_url, _tunnel_status
+    try:
+        proc = subprocess.Popen(
+            ["cloudflared", "tunnel", "--url", "http://localhost:5000"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform.startswith("win") else 0,
+        )
+        for line in proc.stdout:
+            m = _CF_URL_RE.search(line)
+            if m:
+                with _tunnel_lock:
+                    _tunnel_url    = m.group(0)
+                    _tunnel_status = 'ready'
+                break
+        else:
+            with _tunnel_lock:
+                _tunnel_status = 'error'
+    except FileNotFoundError:
+        print("cloudflared not found — remote tunnel unavailable")
+        with _tunnel_lock:
+            _tunnel_status = 'error'
+    except Exception as exc:
+        print(f"Tunnel error: {exc}")
+        with _tunnel_lock:
+            _tunnel_status = 'error'
+
+
+threading.Thread(target=_start_tunnel, daemon=True).start()
 
 app = Flask(__name__)
 socketio = SocketIO(
@@ -331,6 +374,11 @@ def shutdown():
 
     threading.Thread(target=_do_shutdown, daemon=True).start()
     return "Shutting down...", 200
+
+@app.route("/tunnel-status")
+def tunnel_status():
+    with _tunnel_lock:
+        return {"status": _tunnel_status, "url": _tunnel_url}
 
 @app.route("/home-tab-content")
 def home_tab_content():

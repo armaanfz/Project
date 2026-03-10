@@ -148,6 +148,15 @@ let isDragging = false; // Track dragging state
 let startX = 0; // Initial X position on drag start
 let startY = 0; // Initial Y position on drag start
 
+let _panRafId     = null; // rAF handle for batched pan updates
+let _pendingPanDx = 0;    // accumulated horizontal delta since last rAF
+let _pendingPanDy = 0;    // accumulated vertical   delta since last rAF
+
+// Pinch-to-zoom state (two-finger touch)
+let _pinching       = false;
+let _pinchStartDist = 0;
+let _pinchStartZoom = 1;
+
 /* ---------- Camera / 1080p helpers ---------- */
 /**
  * startCamera(videoEl, opts)
@@ -184,17 +193,26 @@ async function startCamera(videoEl, opts = {}) {
     videoEl.playsInline = true;
     videoEl.muted = true; // recommended for autoplay
 
-    // Wait for metadata so video.videoWidth/video.videoHeight are available
-    await new Promise((resolve) => {
-      if (videoEl.readyState >= 1 && videoEl.videoWidth && videoEl.videoHeight) {
-        return resolve();
-      }
-      function onMeta() {
-        videoEl.removeEventListener('loadedmetadata', onMeta);
-        resolve();
-      }
-      videoEl.addEventListener('loadedmetadata', onMeta);
-    });
+    // Wait for metadata so video.videoWidth/video.videoHeight are available.
+    // Race against a 5-second timeout so we don't hang indefinitely on slow cameras.
+    await Promise.race([
+      new Promise((resolve) => {
+        if (videoEl.readyState >= 1 && videoEl.videoWidth && videoEl.videoHeight) {
+          return resolve();
+        }
+        function onMeta() {
+          videoEl.removeEventListener('loadedmetadata', onMeta);
+          resolve();
+        }
+        videoEl.addEventListener('loadedmetadata', onMeta);
+      }),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error('Camera metadata timed out after 5 s')),
+          5000,
+        )
+      ),
+    ]);
 
     console.log('Camera started. Negotiated resolution:', videoEl.videoWidth, 'x', videoEl.videoHeight);
     return stream;
@@ -360,17 +378,20 @@ videoContainer.addEventListener('mousedown', (e) => {
 });
 
 videoContainer.addEventListener('mousemove', (e) => {
-    if (isDragging) {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-
-        translateX += dx;
-        translateY += dy;
-
-        applyTransform(); // Apply transformations with constraints
-
-        startX = e.clientX;
-        startY = e.clientY;
+    if (!isDragging) return;
+    _pendingPanDx += e.clientX - startX;
+    _pendingPanDy += e.clientY - startY;
+    startX = e.clientX;
+    startY = e.clientY;
+    if (!_panRafId) {
+        _panRafId = requestAnimationFrame(() => {
+            translateX    += _pendingPanDx;
+            translateY    += _pendingPanDy;
+            _pendingPanDx  = 0;
+            _pendingPanDy  = 0;
+            _panRafId      = null;
+            applyTransform();
+        });
     }
 });
 
@@ -385,29 +406,57 @@ videoContainer.addEventListener('mouseleave', () => {
 });
 
 videoContainer.addEventListener('touchstart', (e) => {
-    isDragging = true;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-});
-
-videoContainer.addEventListener('touchmove', (e) => {
-    if (isDragging) {
-        e.preventDefault(); // prevent page scroll from conflicting with pan gesture
-        const dx = e.touches[0].clientX - startX;
-        const dy = e.touches[0].clientY - startY;
-
-        translateX += dx;
-        translateY += dy;
-
-        applyTransform();
-
+    if (e.touches.length === 2) {
+        _pinching       = true;
+        isDragging      = false;
+        _pinchStartDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY,
+        );
+        _pinchStartZoom = scale;
+    } else {
+        _pinching  = false;
+        isDragging = true;
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
     }
+});
+
+videoContainer.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (_pinching && e.touches.length === 2) {
+        const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY,
+        );
+        const minZ = parseFloat(zoomSlider?.min) || 1;
+        const maxZ = parseFloat(zoomSlider?.max) || 5;
+        const newZ = Math.round(
+            Math.max(minZ, Math.min(maxZ, _pinchStartZoom * (dist / _pinchStartDist))) * 10
+        ) / 10;
+        if (zoomSlider) zoomSlider.value = newZ;
+        adjustZoom();
+    } else if (isDragging && e.touches.length === 1) {
+        _pendingPanDx += e.touches[0].clientX - startX;
+        _pendingPanDy += e.touches[0].clientY - startY;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        if (!_panRafId) {
+            _panRafId = requestAnimationFrame(() => {
+                translateX    += _pendingPanDx;
+                translateY    += _pendingPanDy;
+                _pendingPanDx  = 0;
+                _pendingPanDy  = 0;
+                _panRafId      = null;
+                applyTransform();
+            });
+        }
+    }
 }, { passive: false });
 
-videoContainer.addEventListener('touchend', () => {
-    isDragging = false;
+videoContainer.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2)  _pinching  = false;
+    if (e.touches.length === 0) isDragging = false;
 });
 
 // Constrain movement within bounds
@@ -520,11 +569,20 @@ function applyCombinedFilters() {
 
 // Adjustable Custom Filters
 function applyCustomFilter() {
-    customFilters.hue = document.getElementById('hue').value;
+    customFilters.hue        = document.getElementById('hue').value;
     customFilters.brightness = document.getElementById('brightness').value;
-    customFilters.contrast = document.getElementById('contrast').value;
+    customFilters.contrast   = document.getElementById('contrast').value;
     customFilters.saturation = document.getElementById('saturation').value;
     applyCombinedFilters();
+    // B — keep aria-valuetext in sync for screen readers
+    const hueEl        = document.getElementById('hue');
+    const brightnessEl = document.getElementById('brightness');
+    const contrastEl   = document.getElementById('contrast');
+    const saturationEl = document.getElementById('saturation');
+    if (hueEl)        hueEl.setAttribute('aria-valuetext',        `${customFilters.hue}\u00b0`);
+    if (brightnessEl) brightnessEl.setAttribute('aria-valuetext', `${customFilters.brightness}%`);
+    if (contrastEl)   contrastEl.setAttribute('aria-valuetext',   `${customFilters.contrast}%`);
+    if (saturationEl) saturationEl.setAttribute('aria-valuetext', `${customFilters.saturation}%`);
     _saveSettings();
 }
 
@@ -549,6 +607,9 @@ function applyFilter(filter) {
     try {
         // startCamera will set videoElement.srcObject and wait for loadedmetadata
         await startCamera(videoElement, { preferExact1080: false });
+
+        // Guard: if the element was removed while the async camera start was in progress, bail out.
+        if (!document.body.contains(videoElement)) return;
 
         // Stop camera when leaving the page (e.g. Back button) so the camera LED turns off
         // Optional: after camera starts, align any overlay / processing canvases to the native video pixels
@@ -1033,6 +1094,9 @@ function drawBarsMask() {
   const ctx = _barsMaskState.ctx;
   const w = _barsMaskState.canvas.width;
   const h = _barsMaskState.canvas.height;
+
+  // K — skip drawing if the canvas has zero dimensions (avoids divide-by-zero)
+  if (w <= 0 || h <= 0) return;
 
   const pct = Math.max(0, Math.min(50, Number(_barsMaskState.barPct) || 0));
 

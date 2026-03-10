@@ -7,6 +7,19 @@
     <meta name="description" content="Magnifier camera – live zoom, color filters, and focus mask to help you read text more clearly.">
     <title>Magnifier – Camera</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <!-- G: restore saved accent colour before CSS loads to avoid flash of default colour -->
+    <script>
+    (function(){
+        try {
+            var c = localStorage.getItem('magnifier_accent');
+            if (c && /^#[0-9a-fA-F]{6}$/.test(c)) {
+                document.documentElement.style.setProperty('--accent-color', c);
+                var r=parseInt(c.slice(1,3),16), g=parseInt(c.slice(3,5),16), b=parseInt(c.slice(5,7),16);
+                document.documentElement.style.setProperty('--accent-color-rgb', r+','+g+','+b);
+            }
+        } catch(_) {}
+    })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/samples.css') }}">
 </head>
 
@@ -45,9 +58,9 @@
     <button class="btn" id="back-btn" aria-label="Back to Magnifier home">⟵ Back</button>
     <div id="video-container">
         <!-- Fix 1: removed src="" to prevent browser treating current URL as a video source -->
-        <video id="video" autoplay playsinline muted aria-label="Live camera view"></video>
+        <video id="video" autoplay playsinline muted role="img" aria-label="Live magnified camera feed for reading"></video>
         
-        <div id="controls">
+        <section id="controls" aria-label="Camera controls">
             <button class="btn" id="tutorial-btn" aria-label="Start tutorial">Tutorial</button>
             <button class="btn" id="filter-button" aria-label="Open filters menu">Filters</button>
             <button class="btn" id="reset-btn" aria-label="Reset zoom to default" style="display: none;">Reset Zoom</button>
@@ -59,7 +72,7 @@
                 <button class="btn" id="mask-orientation-btn" aria-label="Switch mask orientation">Horizontal</button>
                 <button class="btn" id="mask-invert-btn" aria-label="Invert mask (focus center or edges)">Invert</button>
             </div>
-        </div>
+        </section>
         
         <div class="zoom-container">
             <button class="btn zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
@@ -93,22 +106,22 @@
                 <div class="custom-slider-group">
                     <div class="custom-slider-col">
                         <label for="hue">Hue</label>
-                        <input type="range" id="hue" min="0" max="360" value="0" aria-label="Hue">
+                        <input type="range" id="hue" min="0" max="360" value="0" aria-label="Hue" aria-valuetext="0°">
                     </div>
 
                     <div class="custom-slider-col">
                         <label for="brightness">Brightness</label>
-                        <input type="range" id="brightness" min="0" max="200" value="100" aria-label="Brightness">
+                        <input type="range" id="brightness" min="0" max="200" value="100" aria-label="Brightness" aria-valuetext="100%">
                     </div>
 
                     <div class="custom-slider-col">
                         <label for="contrast">Contrast</label>
-                        <input type="range" id="contrast" min="0" max="200" value="100" aria-label="Contrast">
+                        <input type="range" id="contrast" min="0" max="200" value="100" aria-label="Contrast" aria-valuetext="100%">
                     </div>
 
                     <div class="custom-slider-col">
                         <label for="saturation">Saturation</label>
-                        <input type="range" id="saturation" min="0" max="200" value="100" aria-label="Saturation">
+                        <input type="range" id="saturation" min="0" max="200" value="100" aria-label="Saturation" aria-valuetext="100%">
                     </div>
                 </div>
             </div>

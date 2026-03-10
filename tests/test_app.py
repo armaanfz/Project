@@ -108,10 +108,18 @@ def test_stream_frames_emits_latency_timestamp(monkeypatch):
     sleeps = []
     active_modes = iter(["remote", None])
 
-    monkeypatch.setattr(app_module, "_get_active_stream_mode", lambda: next(active_modes))
+    app_module._stream_client_modes["fake_sid"] = "remote"
+
+    def _fake_get_active_mode():
+        result = next(active_modes)
+        if result is None:
+            app_module._stream_client_modes.clear()
+        return result
+
+    monkeypatch.setattr(app_module, "_get_active_stream_mode", _fake_get_active_mode)
     monkeypatch.setattr(app_module, "_get_camera", lambda mode: FakeCamera())
     monkeypatch.setattr(app_module.cv2, "imencode", lambda *_args, **_kwargs: (True, Mock(tobytes=lambda: b"jpeg")))
-    monkeypatch.setattr(app_module.socketio, "emit", lambda event, payload, namespace=None: emitted.append((event, payload, namespace)))
+    monkeypatch.setattr(app_module.socketio, "emit", lambda event, payload, namespace=None, to=None: emitted.append((event, payload, namespace)))
     monkeypatch.setattr(app_module.socketio, "sleep", lambda seconds: sleeps.append(seconds))
 
     app_module._stream_frames()

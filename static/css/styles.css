@@ -1,3 +1,9 @@
+/* ── CSS custom properties ──────────────────────────────────────────────────── */
+:root {
+    --accent-color:     #ffd700;
+    --accent-color-rgb: 255, 215, 0;
+}
+
 body {
     font-family: Arial, sans-serif;
     margin: 0;
@@ -12,7 +18,7 @@ body {
 
 nav {
     background-color: #000;
-    border-bottom: 2px solid #ffd700;
+    border-bottom: 2px solid var(--accent-color);
     padding: 12px 0;
 }
 
@@ -28,7 +34,7 @@ nav {
 h1 {
     margin: 0;
     font-size: 36px;
-    color: #ffd700;
+    color: var(--accent-color);
 }
 
 nav ul {
@@ -50,19 +56,19 @@ nav ul li a {
 }
 
 nav ul li a:hover {
-    color: #ffd700;
-    text-shadow: 0 0 8px rgba(255, 215, 0, 0.8);
+    color: var(--accent-color);
+    text-shadow: 0 0 8px rgba(var(--accent-color-rgb), 0.8);
 }
 
 nav ul li a.nav-active {
-    color: #ffd700;
+    color: var(--accent-color);
     text-decoration: underline;
     text-underline-offset: 4px;
 }
 
 nav ul li a:focus-visible,
 .start-btn:focus-visible {
-    outline: 2px solid #ffd700;
+    outline: 2px solid var(--accent-color);
     outline-offset: 3px;
 }
 
@@ -78,7 +84,7 @@ nav ul li a:focus-visible,
 .content-panel,
 .quick-start {
     background: rgba(17, 17, 17, 0.92);
-    border: 2px solid #ffd700;
+    border: 2px solid var(--accent-color);
     border-radius: 12px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
     color: #ffffff;
@@ -100,7 +106,7 @@ nav ul li a:focus-visible,
 .quick-start h2 {
     margin-top: 0;
     margin-bottom: 8px;
-    color: #ffd700;
+    color: var(--accent-color);
     font-size: 32px;
 }
 
@@ -111,7 +117,7 @@ nav ul li a:focus-visible,
 }
 
 .content-panel h3 {
-    color: #ffd700;
+    color: var(--accent-color);
     margin-bottom: 8px;
 }
 
@@ -132,13 +138,13 @@ nav ul li a:focus-visible,
     font-weight: 800;
     cursor: pointer;
     background-color: #000;
-    color: #ffd700;
-    border: 2px solid #ffd700;
+    color: var(--accent-color);
+    border: 2px solid var(--accent-color);
     border-radius: 10px;
 }
 
 .start-btn:hover {
-    box-shadow: 0 0 14px rgba(255, 215, 0, 0.8);
+    box-shadow: 0 0 14px rgba(var(--accent-color-rgb), 0.8);
     transform: translateY(-1px);
 }
 
@@ -152,20 +158,20 @@ nav ul li a:focus-visible,
     padding: 10px 20px;
     font-size: 16px;
     cursor: pointer;
-    background-color: #ffd700;
+    background-color: var(--accent-color);
     color: #000;
-    border: 2px solid #ffd700;
+    border: 2px solid var(--accent-color);
     border-radius: 8px;
     font-weight: 700;
 }
 
 .retry-btn:hover {
     background-color: #000;
-    color: #ffd700;
+    color: var(--accent-color);
 }
 
 .retry-btn:focus-visible {
-    outline: 2px solid #ffd700;
+    outline: 2px solid var(--accent-color);
     outline-offset: 2px;
 }
 
@@ -202,5 +208,84 @@ nav ul li a:focus-visible,
 
     .quick-start {
         position: static;
+    }
+}
+
+/* ── Accent colour picker (home screen) ──────────────────────────────────────── */
+.accent-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.accent-picker-label {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    flex-shrink: 0;
+}
+
+#accent-picker {
+    width: 56px;
+    height: 48px;
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    background: none;
+    cursor: pointer;
+    padding: 3px;
+    flex-shrink: 0;
+}
+
+#accent-picker:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+.accent-reset-btn {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 10px 16px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--accent-color);
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+}
+
+.accent-reset-btn:hover {
+    background: rgba(var(--accent-color-rgb), 0.15);
+}
+
+.accent-reset-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* ── Forced-colors / high-contrast mode ─────────────────────────────────────── */
+@media (forced-colors: active) {
+    nav {
+        border-bottom: 2px solid ButtonText;
+    }
+    .content-panel,
+    .quick-start {
+        border: 2px solid CanvasText;
+    }
+    .start-btn {
+        border: 2px solid ButtonText;
+        color: ButtonText;
+        background: ButtonFace;
+        forced-color-adjust: none;
+    }
+    .start-btn:focus-visible,
+    nav ul li a:focus-visible {
+        outline: 3px solid Highlight;
+    }
+    .shutdown-btn {
+        border: 1px solid ButtonText;
+        color: ButtonText;
+        background: ButtonFace;
     }
 }

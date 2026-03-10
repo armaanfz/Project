@@ -1,9 +1,11 @@
 import os
+import platform
 import re
 import socket
 import subprocess
 import sys
 import time
+import urllib.request
 import cv2
 import threading
 from flask import Flask, render_template, request
@@ -28,15 +30,52 @@ _tunnel_url    = None
 _tunnel_status = 'starting'
 _tunnel_lock   = threading.Lock()
 
-_CF_URL_RE = re.compile(r'https://\S+\.trycloudflare\.com')
+_CF_URL_RE     = re.compile(r'https://\S+\.trycloudflare\.com')
+_CF_INSTALL_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _install_cloudflared():
+    """Download the cloudflared binary for this platform and return its path."""
+    machine = platform.machine().lower()
+    if sys.platform.startswith("win"):
+        filename = "cloudflared.exe"
+        arch = "amd64" if "64" in machine else "386"
+        url = f"https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-{arch}.exe"
+    elif sys.platform.startswith("linux"):
+        filename = "cloudflared"
+        if "aarch64" in machine or "arm64" in machine:
+            arch = "arm64"
+        elif "arm" in machine:
+            arch = "arm"
+        else:
+            arch = "amd64"
+        url = f"https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-{arch}"
+    else:
+        raise OSError(f"Auto-install not supported on {sys.platform}; install cloudflared manually")
+
+    dest = os.path.join(_CF_INSTALL_DIR, filename)
+    print(f"cloudflared not found — downloading from {url} ...")
+    urllib.request.urlretrieve(url, dest)
+    if not sys.platform.startswith("win"):
+        os.chmod(dest, 0o755)
+    print(f"cloudflared installed at {dest}")
+    return dest
 
 
 def _start_tunnel():
-    """Launch a Cloudflare quick tunnel and parse the assigned URL."""
+    """Launch a Cloudflare quick tunnel, auto-installing cloudflared if needed."""
     global _tunnel_url, _tunnel_status
-    try:
+
+    _cf_local = os.path.join(
+        _CF_INSTALL_DIR,
+        "cloudflared.exe" if sys.platform.startswith("win") else "cloudflared",
+    )
+    cmd = _cf_local if os.path.isfile(_cf_local) else "cloudflared"
+
+    def _run(cf_cmd):
+        """Start cloudflared and return (url, status) once the URL is known."""
         proc = subprocess.Popen(
-            ["cloudflared", "tunnel", "--url", "http://localhost:5000"],
+            [cf_cmd, "tunnel", "--url", "http://localhost:5000"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -46,21 +85,35 @@ def _start_tunnel():
         for line in proc.stdout:
             m = _CF_URL_RE.search(line)
             if m:
-                with _tunnel_lock:
-                    _tunnel_url    = m.group(0)
-                    _tunnel_status = 'ready'
-                break
-        else:
+                return m.group(0), 'ready'
+        return None, 'error'
+
+    try:
+        url, status = _run(cmd)
+    except FileNotFoundError:
+        try:
+            cmd = _install_cloudflared()
+        except Exception as exc:
+            print(f"cloudflared auto-install failed: {exc}")
             with _tunnel_lock:
                 _tunnel_status = 'error'
-    except FileNotFoundError:
-        print("cloudflared not found — remote tunnel unavailable")
-        with _tunnel_lock:
-            _tunnel_status = 'error'
+            return
+        try:
+            url, status = _run(cmd)
+        except Exception as exc:
+            print(f"Tunnel error after install: {exc}")
+            with _tunnel_lock:
+                _tunnel_status = 'error'
+            return
     except Exception as exc:
         print(f"Tunnel error: {exc}")
         with _tunnel_lock:
             _tunnel_status = 'error'
+        return
+
+    with _tunnel_lock:
+        _tunnel_url    = url
+        _tunnel_status = status
 
 
 threading.Thread(target=_start_tunnel, daemon=True).start()

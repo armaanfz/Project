@@ -151,9 +151,9 @@ CAMERA_HEIGHT        = _clamp_env_int("CAMERA_HEIGHT",      1080, lo=240)
 CAMERA_FPS           = _clamp_env_int("CAMERA_FPS",           30, lo=1,  hi=60)
 REMOTE_CAMERA_WIDTH  = _clamp_env_int("REMOTE_CAMERA_WIDTH", 1280, lo=320)
 REMOTE_CAMERA_HEIGHT = _clamp_env_int("REMOTE_CAMERA_HEIGHT",  720, lo=240)
-REMOTE_CAMERA_FPS    = _clamp_env_int("REMOTE_CAMERA_FPS",     24, lo=1,  hi=60)
-LOCAL_JPEG_QUALITY   = _clamp_env_int("LOCAL_JPEG_QUALITY",    85, lo=1,  hi=100)
-REMOTE_JPEG_QUALITY  = _clamp_env_int("REMOTE_JPEG_QUALITY",   50, lo=1,  hi=100)
+REMOTE_CAMERA_FPS    = _clamp_env_int("REMOTE_CAMERA_FPS",     30, lo=1,  hi=60)
+LOCAL_JPEG_QUALITY   = _clamp_env_int("LOCAL_JPEG_QUALITY",    92, lo=1,  hi=100)
+REMOTE_JPEG_QUALITY  = _clamp_env_int("REMOTE_JPEG_QUALITY",   75, lo=1,  hi=100)
 STREAM_RELEASE_GRACE_SECONDS = float(os.environ.get("STREAM_RELEASE_GRACE_SECONDS", "2.0"))
 
 STREAM_PROFILES = {

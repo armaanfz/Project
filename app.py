@@ -73,6 +73,7 @@ def _start_tunnel():
     cmd = _cf_local if os.path.isfile(_cf_local) else "cloudflared"
 
     def _run(cf_cmd):
+        """Start cloudflared and return (url, status) once the URL is known."""
         proc = subprocess.Popen(
             [cf_cmd, "tunnel", "--url", "http://localhost:5000"],
             stdout=subprocess.PIPE,
@@ -84,16 +85,11 @@ def _start_tunnel():
         for line in proc.stdout:
             m = _CF_URL_RE.search(line)
             if m:
-                with _tunnel_lock:
-                    _tunnel_url    = m.group(0)
-                    _tunnel_status = 'ready'
-                break
-        else:
-            with _tunnel_lock:
-                _tunnel_status = 'error'
+                return m.group(0), 'ready'
+        return None, 'error'
 
     try:
-        _run(cmd)
+        url, status = _run(cmd)
     except FileNotFoundError:
         try:
             cmd = _install_cloudflared()
@@ -103,15 +99,21 @@ def _start_tunnel():
                 _tunnel_status = 'error'
             return
         try:
-            _run(cmd)
+            url, status = _run(cmd)
         except Exception as exc:
             print(f"Tunnel error after install: {exc}")
             with _tunnel_lock:
                 _tunnel_status = 'error'
+            return
     except Exception as exc:
         print(f"Tunnel error: {exc}")
         with _tunnel_lock:
             _tunnel_status = 'error'
+        return
+
+    with _tunnel_lock:
+        _tunnel_url    = url
+        _tunnel_status = status
 
 
 threading.Thread(target=_start_tunnel, daemon=True).start()

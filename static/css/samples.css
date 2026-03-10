@@ -1,6 +1,6 @@
 /* ── CSS custom properties ──────────────────────────────────────────────────── */
 :root {
-    --accent-color:     var(--accent-color);
+    --accent-color:     #ffd700;
     --accent-color-rgb: 255, 215, 0;
 }
 

@@ -37,15 +37,27 @@ _stream_state_lock = threading.Lock()
 _stream_client_modes = {}
 _stream_thread = None
 _release_timer = None
-CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "0"))
-CAMERA_WIDTH = int(os.environ.get("CAMERA_WIDTH", "1920"))
-CAMERA_HEIGHT = int(os.environ.get("CAMERA_HEIGHT", "1080"))
-CAMERA_FPS = int(os.environ.get("CAMERA_FPS", "30"))
-REMOTE_CAMERA_WIDTH = int(os.environ.get("REMOTE_CAMERA_WIDTH", "1280"))
-REMOTE_CAMERA_HEIGHT = int(os.environ.get("REMOTE_CAMERA_HEIGHT", "720"))
-REMOTE_CAMERA_FPS = int(os.environ.get("REMOTE_CAMERA_FPS", "24"))
-LOCAL_JPEG_QUALITY = int(os.environ.get("LOCAL_JPEG_QUALITY", "85"))
-REMOTE_JPEG_QUALITY = int(os.environ.get("REMOTE_JPEG_QUALITY", "50"))
+def _clamp_env_int(name, default, lo=None, hi=None):
+    """Parse an integer env var with optional lower/upper bounds."""
+    try:
+        v = int(os.environ.get(name, str(default)))
+    except (ValueError, TypeError):
+        v = default
+    if lo is not None:
+        v = max(lo, v)
+    if hi is not None:
+        v = min(hi, v)
+    return v
+
+CAMERA_INDEX         = _clamp_env_int("CAMERA_INDEX",          0, lo=0)
+CAMERA_WIDTH         = _clamp_env_int("CAMERA_WIDTH",       1920, lo=320)
+CAMERA_HEIGHT        = _clamp_env_int("CAMERA_HEIGHT",      1080, lo=240)
+CAMERA_FPS           = _clamp_env_int("CAMERA_FPS",           30, lo=1,  hi=60)
+REMOTE_CAMERA_WIDTH  = _clamp_env_int("REMOTE_CAMERA_WIDTH", 1280, lo=320)
+REMOTE_CAMERA_HEIGHT = _clamp_env_int("REMOTE_CAMERA_HEIGHT",  720, lo=240)
+REMOTE_CAMERA_FPS    = _clamp_env_int("REMOTE_CAMERA_FPS",     24, lo=1,  hi=60)
+LOCAL_JPEG_QUALITY   = _clamp_env_int("LOCAL_JPEG_QUALITY",    85, lo=1,  hi=100)
+REMOTE_JPEG_QUALITY  = _clamp_env_int("REMOTE_JPEG_QUALITY",   50, lo=1,  hi=100)
 STREAM_RELEASE_GRACE_SECONDS = float(os.environ.get("STREAM_RELEASE_GRACE_SECONDS", "2.0"))
 
 STREAM_PROFILES = {
@@ -241,7 +253,6 @@ def _stream_frames():
 
         profile = STREAM_PROFILES[mode]
         interval = 1.0 / profile["fps"]
-        quality = profile["quality"]
         started_at = time.monotonic()
 
         try:
@@ -270,20 +281,32 @@ def _stream_frames():
             socketio.sleep(0.25)
             continue
 
-        encoded, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
-        if not encoded:
-            app.logger.error("WebSocket frame encoding failed")
-            socketio.sleep(0)
-            continue
+        ts_ms = int(time.time() * 1000)
+        with _stream_state_lock:
+            clients_snapshot = dict(_stream_client_modes)
 
-        socketio.emit(
-            "frame",
-            {
-                "data": jpeg.tobytes(),
-                "server_ts_ms": int(time.time() * 1000),
-            },
-            namespace="/stream",
-        )
+        local_sids  = [sid for sid, m in clients_snapshot.items() if m == "local"]
+        remote_sids = [sid for sid, m in clients_snapshot.items() if m == "remote"]
+
+        if remote_sids:
+            enc_ok, rem_jpeg = cv2.imencode(
+                ".jpg", frame,
+                [cv2.IMWRITE_JPEG_QUALITY, STREAM_PROFILES["remote"]["quality"]],
+            )
+            if enc_ok and rem_jpeg is not None:
+                payload = {"data": rem_jpeg.tobytes(), "server_ts_ms": ts_ms}
+                for sid in remote_sids:
+                    socketio.emit("frame", payload, namespace="/stream", to=sid)
+
+        if local_sids:
+            enc_ok, loc_jpeg = cv2.imencode(
+                ".jpg", frame,
+                [cv2.IMWRITE_JPEG_QUALITY, STREAM_PROFILES["local"]["quality"]],
+            )
+            if enc_ok and loc_jpeg is not None:
+                payload = {"data": loc_jpeg.tobytes(), "server_ts_ms": ts_ms}
+                for sid in local_sids:
+                    socketio.emit("frame", payload, namespace="/stream", to=sid)
 
         elapsed = time.monotonic() - started_at
         socketio.sleep(max(0, interval - elapsed))

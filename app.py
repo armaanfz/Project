@@ -467,4 +467,9 @@ def stream_disconnect():
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
-    socketio.run(app, debug=debug, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
+    run_kwargs = {"debug": debug, "host": "0.0.0.0", "port": 5000}
+    # allow_unsafe_werkzeug is Werkzeug-specific; passing it to gevent (Pi/Linux)
+    # leaks into gevent's ssl_args and causes a TypeError inside wrap_socket().
+    if _default_socketio_async_mode() == "threading":
+        run_kwargs["allow_unsafe_werkzeug"] = True
+    socketio.run(app, **run_kwargs)

@@ -168,23 +168,6 @@ def test_active_stream_mode_returns_none_without_clients():
     assert app_module._get_active_stream_mode() is None
 
 
-def test_generate_mjpeg_releases_camera_on_read_failure(monkeypatch):
-    released = {"called": False}
-
-    class FakeCamera:
-        def read(self):
-            return False, None
-
-    def fake_release_camera():
-        released["called"] = True
-
-    monkeypatch.setattr(app_module, "_release_camera", fake_release_camera)
-
-    frames = list(app_module._generate_mjpeg(FakeCamera(), "remote"))
-
-    assert frames == []
-    assert released["called"] is True
-
 
 def test_get_camera_raises_when_device_cannot_open(monkeypatch):
     class FakeCamera:

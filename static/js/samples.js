@@ -24,6 +24,96 @@ const customFilters = {
     saturation: 100,
 };
 
+// ── Settings persistence ──────────────────────────────────────────────────────
+const _SETTINGS_KEY = 'magnifier_settings';
+
+function _saveSettings() {
+    try {
+        localStorage.setItem(_SETTINGS_KEY, JSON.stringify({
+            zoom: scale,
+            filterKey: (document.querySelector('.filter-btn[data-filter].active') || {}).dataset?.filter ?? 'normal',
+            customFilters: { ...customFilters },
+            mask: {
+                enabled: _barsMaskState.enabled,
+                barPct: _barsMaskState.barPct,
+                orientation: _barsMaskState.orientation,
+                inverted: _barsMaskState.inverted,
+            },
+        }));
+    } catch (_) { /* localStorage unavailable (private/incognito mode) */ }
+}
+
+function _restoreSettings() {
+    let saved;
+    try {
+        const raw = localStorage.getItem(_SETTINGS_KEY);
+        if (!raw) return;
+        saved = JSON.parse(raw);
+    } catch (_) { return; }
+
+    // Restore zoom
+    if (typeof saved.zoom === 'number' && saved.zoom >= 1) {
+        if (zoomSlider) zoomSlider.value = String(saved.zoom);
+        adjustZoom();
+    }
+
+    // Restore predefined filter
+    if (saved.filterKey) {
+        const filterFunctions = {
+            'normal': applyNormal,
+            'protanopia': applyProtanopia,
+            'deuteranopia': applyDeuteranopia,
+            'tritanopia': applyTritanopia,
+            'grayscale': applyGrayscale,
+            'inverted': applyInverted,
+            'inverted-grayscale': applyInvertedGrayscale,
+            'blue-on-yellow': applyBlueOnYellow,
+            'orange-on-black': applyNeonOrangeOnBlack,
+            'green-on-black': applyNeonGreenOnBlack,
+            'yellow-on-black': applyYellowOnBlack,
+            'purple-on-black': applyPurpleOnBlack,
+        };
+        const fn = filterFunctions[saved.filterKey];
+        if (fn) {
+            fn();
+            _setActiveFilterBtn(saved.filterKey);
+        }
+    }
+
+    // Restore custom filter sliders
+    if (saved.customFilters) {
+        ['hue', 'brightness', 'contrast', 'saturation'].forEach(key => {
+            if (typeof saved.customFilters[key] !== 'undefined') {
+                customFilters[key] = saved.customFilters[key];
+                const el = document.getElementById(key);
+                if (el) el.value = saved.customFilters[key];
+            }
+        });
+        applyCombinedFilters();
+    }
+
+    // Restore mask state
+    if (saved.mask) {
+        _barsMaskState.barPct = saved.mask.barPct ?? _barsMaskState.barPct;
+        _barsMaskState.orientation = saved.mask.orientation ?? _barsMaskState.orientation;
+        _barsMaskState.inverted = saved.mask.inverted ?? _barsMaskState.inverted;
+        const radiusEl = document.getElementById('mask-radius');
+        if (radiusEl) radiusEl.value = String(_barsMaskState.barPct);
+        updateMaskOrientationButton();
+        updateMaskInvertButton();
+        if (saved.mask.enabled) enableBarsMask();
+    }
+}
+
+function _setActiveFilterBtn(key) {
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+        const isActive = btn.dataset.filter === key;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+// ── End settings persistence ──────────────────────────────────────────────────
+
 const orientationBtn = document.getElementById('mask-orientation-btn');
 if (orientationBtn) {
   orientationBtn.addEventListener('click', () => {
@@ -36,6 +126,7 @@ if (orientationBtn) {
     // Update button label + redraw
     updateMaskOrientationButton();
     drawBarsMask();
+    _saveSettings();
   });
 }
 
@@ -169,6 +260,7 @@ function initializeRemoteSocketStream() {
     closeOnBeforeunload: true,
   });
   const frameImage = new Image();
+  let _prevFrameUrl = null;
   const remoteStatusState = {
     baseText: 'Remote Feed - Connecting...',
     color: '#ff6b6b',
@@ -224,8 +316,15 @@ function initializeRemoteSocketStream() {
     frameImage.onload = () => {
       remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
       remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+      if (_prevFrameUrl) {
+        URL.revokeObjectURL(_prevFrameUrl);
+        _prevFrameUrl = null;
+      }
     };
-    frameImage.src = `data:image/jpeg;base64,${payload.data}`;
+    const frameBlob = new Blob([payload.data], { type: 'image/jpeg' });
+    const frameUrl = URL.createObjectURL(frameBlob);
+    _prevFrameUrl = frameUrl;
+    frameImage.src = frameUrl;
   });
 }
 
@@ -370,6 +469,7 @@ function adjustZoom() {
         zoomSlider.setAttribute('aria-valuenow', String(scale));
         zoomSlider.setAttribute('aria-valuetext', `Zoom ${scale.toFixed(1)}x`);
     }
+    _saveSettings();
 }
 
 // Change zoom via + / - buttons by delta (e.g., 0.1)
@@ -425,6 +525,7 @@ function applyCustomFilter() {
     customFilters.contrast = document.getElementById('contrast').value;
     customFilters.saturation = document.getElementById('saturation').value;
     applyCombinedFilters();
+    _saveSettings();
 }
 
 // Predefined Filters
@@ -460,6 +561,34 @@ function applyFilter(filter) {
         console.log('Camera stream active. Negotiated resolution (videoElement):', videoElement.videoWidth, 'x', videoElement.videoHeight);
     } catch (err) {
         console.error('Camera startup failed:', err);
+
+        const isPermissionDenied = err?.name === 'NotAllowedError';
+        const isNoDevice = err?.name === 'NotFoundError' || err?.name === 'NotReadableError';
+        const title = isPermissionDenied
+            ? 'Camera access was denied'
+            : isNoDevice
+            ? 'No camera found'
+            : 'Camera error';
+        const message = isPermissionDenied
+            ? 'Please allow camera access in your browser settings, then reload the page.'
+            : isNoDevice
+            ? 'Make sure the camera is connected and not in use by another app.'
+            : 'The camera could not be started. Try reloading the page.';
+
+        if (videoContainer) {
+            const errCard = document.createElement('div');
+            errCard.className = 'camera-error';
+            const h2 = document.createElement('h2');
+            h2.textContent = title;
+            const p = document.createElement('p');
+            p.textContent = message;
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'btn';
+            retryBtn.textContent = 'Retry';
+            retryBtn.addEventListener('click', () => window.location.reload());
+            errCard.append(h2, p, retryBtn);
+            videoContainer.appendChild(errCard);
+        }
     }
 })();
 
@@ -618,8 +747,13 @@ document.addEventListener('DOMContentLoaded', () => {
         'purple-on-black': applyPurpleOnBlack
     };
     document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
-        const fn = filterMap[btn.dataset.filter];
-        if (fn) btn.addEventListener('click', fn);
+        const key = btn.dataset.filter;
+        const fn = filterMap[key];
+        if (fn) btn.addEventListener('click', () => {
+            fn();
+            _setActiveFilterBtn(key);
+            _saveSettings();
+        });
     });
 
     // Custom filter sliders
@@ -646,6 +780,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize button state and zoom aria on page load
     updateResetButtonVisibility();
     adjustZoom();
+
+    // Persist save on resetZoom too
+    const _origResetZoom = window.resetZoom;
+    window.resetZoom = function () {
+        _origResetZoom();
+        _saveSettings();
+    };
 });
 
 // Back button function
@@ -747,6 +888,7 @@ function _ensureMaskUIExists() {
       input.addEventListener('input', (e) => {
         _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
         drawBarsMask();
+        _saveSettings();
       });
       maskControls.appendChild(input);
     }
@@ -938,6 +1080,7 @@ function enableBarsMask() {
   drawBarsMask();
   updateMaskOrientationButton();
   updateMaskInvertButton();
+  _saveSettings();
 }
 
 function disableBarsMask() {
@@ -956,6 +1099,7 @@ function disableBarsMask() {
   if (controls) controls.style.display = 'none';
   const btn = document.getElementById('mask-btn');
   if (btn) btn.classList.remove('active'), btn.setAttribute('aria-pressed','false');
+  _saveSettings();
 }
 
 function toggleBarsMask() {
@@ -991,12 +1135,14 @@ if (invertBtn) {
     _barsMaskState.inverted = !_barsMaskState.inverted;
     updateMaskInvertButton();
     drawBarsMask();
+    _saveSettings();
   });
 }
 
 // initialize (call once)
 document.addEventListener('DOMContentLoaded', () => {
   setupBarsMaskFeature();
+  _restoreSettings();
 
   let overlay, box, textEl, highlight;
   let stepIndex = 0;
@@ -1149,6 +1295,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderStep() {
     const step = steps[stepIndex];
+    if (!step) return;
     textEl.textContent = step.text;
 
     if (typeof step.before === "function") {
@@ -1186,4 +1333,43 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById("tutorial-btn")?.addEventListener("click", () => {
     if (!overlay) createTutorial();
   });
+});
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  // Do not fire shortcuts when focus is inside a text input or slider
+  const tag = (e.target?.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return;
+
+  switch (e.key) {
+    case '+':
+    case '=':
+      e.preventDefault();
+      changeZoom(0.1);
+      break;
+    case '-':
+      e.preventDefault();
+      changeZoom(-0.1);
+      break;
+    case '0':
+      e.preventDefault();
+      if (typeof window.resetZoom === 'function') window.resetZoom();
+      break;
+    case 'f':
+    case 'F':
+      e.preventDefault();
+      if (typeof toggleMenu === 'function') toggleMenu();
+      break;
+    case 'm':
+    case 'M':
+      e.preventDefault();
+      if (typeof toggleBarsMask === 'function') toggleBarsMask();
+      break;
+    case 'Escape':
+      if (menu && menu.classList.contains('active')) {
+        e.preventDefault();
+        menu.classList.remove('active');
+      }
+      break;
+  }
 });

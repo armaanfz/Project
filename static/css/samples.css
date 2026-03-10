@@ -501,6 +501,45 @@ box-shadow: 0 0 12px rgba(255,215,0,0.8);
 transform: scale(1.03);
 }
 
+/* Filter button active state */
+.filter-btn.active {
+border: 2px solid #ffd700;
+box-shadow: 0 0 8px rgba(255,215,0,0.6);
+}
+
+/* Camera error card */
+.camera-error {
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 12px;
+padding: 32px 24px;
+background: rgba(0, 0, 0, 0.85);
+border: 2px solid #ffd700;
+border-radius: 12px;
+color: #ffd700;
+text-align: center;
+max-width: 420px;
+margin: auto;
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+z-index: 999;
+}
+
+.camera-error h2 {
+font-size: 1.5rem;
+margin: 0;
+}
+
+.camera-error p {
+font-size: 1rem;
+color: #ccc;
+margin: 0;
+}
+
 /* Hide the optional shape button by default (not used for letterbox) */
 #mask-shape-btn {
 display: none !important;

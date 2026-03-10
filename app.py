@@ -1,5 +1,4 @@
 import os
-import base64
 import socket
 import subprocess
 import sys
@@ -280,7 +279,7 @@ def _stream_frames():
         socketio.emit(
             "frame",
             {
-                "data": base64.b64encode(jpeg.tobytes()).decode("utf-8"),
+                "data": jpeg.tobytes(),
                 "server_ts_ms": int(time.time() * 1000),
             },
             namespace="/stream",

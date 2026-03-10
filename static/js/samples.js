@@ -1203,6 +1203,19 @@ if (invertBtn) {
   });
 }
 
+// Wire the mask-radius slider for pages that already have it in the HTML.
+// _ensureMaskUIExists() only attaches the listener when it creates the element
+// dynamically; if the element exists in the HTML it is skipped, so we wire it
+// here at module scope (script is deferred, so the DOM is ready).
+const _maskRadiusEl = document.getElementById('mask-radius');
+if (_maskRadiusEl) {
+  _maskRadiusEl.addEventListener('input', (e) => {
+    _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
+    drawBarsMask();
+    _saveSettings();
+  });
+}
+
 // initialize (call once)
 document.addEventListener('DOMContentLoaded', () => {
   setupBarsMaskFeature();

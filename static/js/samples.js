@@ -263,7 +263,7 @@ function formatRemoteStatus(baseText, latencyMs = null) {
 }
 
 function initializeRemoteSocketStream() {
-  if (!remoteCanvasElement || !remoteCanvasContext || typeof window.io !== 'function') {
+  if (!remoteCanvasElement || !remoteCanvasContext) {
     updateRemoteStatus('Streaming unavailable', '#ff6b6b', '#ff6b6b');
     return;
   }
@@ -271,12 +271,6 @@ function initializeRemoteSocketStream() {
   resizeRemoteCanvas();
   window.addEventListener('resize', resizeRemoteCanvas);
 
-  const socket = window.io('/stream', {
-    transports: ['websocket'],
-    reconnectionDelay: 1000,
-    reconnectionAttempts: Infinity,
-    closeOnBeforeunload: true,
-  });
   const frameImage = new Image();
   let _prevFrameUrl = null;
   const remoteStatusState = {
@@ -286,8 +280,6 @@ function initializeRemoteSocketStream() {
     latencyMs: null,
   };
 
-  window.remoteStreamSocket = socket;
-
   function renderRemoteStatus() {
     updateRemoteStatus(
       formatRemoteStatus(remoteStatusState.baseText, remoteStatusState.latencyMs),
@@ -296,60 +288,83 @@ function initializeRemoteSocketStream() {
     );
   }
 
-  socket.on('connect', () => {
-    remoteStatusState.baseText = 'Remote Feed - Connected';
-    remoteStatusState.color = '#7CFC00';
-    remoteStatusState.borderColor = '#7CFC00';
-    remoteStatusState.latencyMs = null;
-    renderRemoteStatus();
-  });
+  function connect() {
+    // Use wss:// when the page is served over HTTPS (e.g. through the Cloudflare
+    // tunnel), ws:// for plain HTTP (local access).
+    // The proxy routes /ws → stream server port 5001; use window.location.host
+    // so the URL works both locally (ws://localhost/ws) and through the tunnel
+    // (wss://your-tunnel.trycloudflare.com/ws).
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${proto}//${window.location.host}/ws`;
+    const socket = new WebSocket(wsUrl);
+    socket.binaryType = 'arraybuffer';
+    window.remoteStreamSocket = socket;
 
-  socket.on('disconnect', () => {
-    remoteStatusState.baseText = 'Remote Feed - Reconnecting...';
-    remoteStatusState.color = '#ff6b6b';
-    remoteStatusState.borderColor = '#ff6b6b';
-    remoteStatusState.latencyMs = null;
-    renderRemoteStatus();
-  });
+    socket.onopen = () => {
+      remoteStatusState.baseText = 'Remote Feed - Connected';
+      remoteStatusState.color = '#7CFC00';
+      remoteStatusState.borderColor = '#7CFC00';
+      remoteStatusState.latencyMs = null;
+      renderRemoteStatus();
+    };
 
-  socket.on('stream_status', (payload) => {
-    if (payload?.state === 'error') {
-      remoteStatusState.baseText = `Remote Feed - ${payload.message || 'Camera unavailable'}`;
+    socket.onclose = () => {
+      // remoteStreamSocket is set to null by stopRemoteSocketStream before
+      // close() is called; a null value here means the stop was intentional.
+      if (window.remoteStreamSocket === null) return;
+      remoteStatusState.baseText = 'Remote Feed - Reconnecting...';
       remoteStatusState.color = '#ff6b6b';
       remoteStatusState.borderColor = '#ff6b6b';
       remoteStatusState.latencyMs = null;
       renderRemoteStatus();
-    }
-  });
+      setTimeout(connect, 1000);
+    };
 
-  socket.on('frame', (payload) => {
-    if (typeof payload?.server_ts_ms === 'number') {
+    socket.onerror = () => {
+      // onclose fires after onerror; reconnect is handled there.
+    };
+
+    socket.onmessage = (event) => {
+      const buffer = event.data;
+      if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 8) return;
+
+      // Binary protocol: first 8 bytes = big-endian int64 server timestamp (ms),
+      // remaining bytes = JPEG frame data.
+      const view = new DataView(buffer);
+      const tsMs = Number(view.getBigInt64(0));
+      const jpegBytes = buffer.slice(8);
+
       remoteStatusState.baseText = 'Remote Feed - Connected';
       remoteStatusState.color = '#7CFC00';
       remoteStatusState.borderColor = '#7CFC00';
-      remoteStatusState.latencyMs = Date.now() - payload.server_ts_ms;
+      remoteStatusState.latencyMs = Date.now() - tsMs;
       renderRemoteStatus();
-    }
 
-    frameImage.onload = () => {
-      remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
-      remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
-      if (_prevFrameUrl) {
-        URL.revokeObjectURL(_prevFrameUrl);
-        _prevFrameUrl = null;
-      }
+      frameImage.onload = () => {
+        remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+        remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+        if (_prevFrameUrl) {
+          URL.revokeObjectURL(_prevFrameUrl);
+          _prevFrameUrl = null;
+        }
+      };
+      const frameBlob = new Blob([jpegBytes], { type: 'image/jpeg' });
+      const frameUrl = URL.createObjectURL(frameBlob);
+      _prevFrameUrl = frameUrl;
+      frameImage.src = frameUrl;
     };
-    const frameBlob = new Blob([payload.data], { type: 'image/jpeg' });
-    const frameUrl = URL.createObjectURL(frameBlob);
-    _prevFrameUrl = frameUrl;
-    frameImage.src = frameUrl;
-  });
+  }
+
+  connect();
 }
 
 function stopRemoteSocketStream() {
-  if (window.remoteStreamSocket && typeof window.remoteStreamSocket.disconnect === 'function') {
-    window.remoteStreamSocket.disconnect();
-    window.remoteStreamSocket = null;
+  // Null out the reference first so the onclose handler does not trigger a
+  // reconnect attempt.
+  const sock = window.remoteStreamSocket;
+  window.remoteStreamSocket = null;
+  if (sock) {
+    sock.close();
   }
 }
 

@@ -6,7 +6,6 @@ import subprocess
 import sys
 import time
 import urllib.request
-import cv2
 import threading
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO
@@ -125,52 +124,6 @@ socketio = SocketIO(
     cors_allowed_origins="*",
 )
 
-# ── Camera streaming state ──────────────────────────────────────────────────
-_camera_lock = threading.Lock()
-_camera = None
-_current_mode = None
-_stream_state_lock = threading.Lock()
-_stream_client_modes = {}
-_stream_thread = None
-_release_timer = None
-def _clamp_env_int(name, default, lo=None, hi=None):
-    """Parse an integer env var with optional lower/upper bounds."""
-    try:
-        v = int(os.environ.get(name, str(default)))
-    except (ValueError, TypeError):
-        v = default
-    if lo is not None:
-        v = max(lo, v)
-    if hi is not None:
-        v = min(hi, v)
-    return v
-
-CAMERA_INDEX         = _clamp_env_int("CAMERA_INDEX",          0, lo=0)
-CAMERA_WIDTH         = _clamp_env_int("CAMERA_WIDTH",       1920, lo=320)
-CAMERA_HEIGHT        = _clamp_env_int("CAMERA_HEIGHT",      1080, lo=240)
-CAMERA_FPS           = _clamp_env_int("CAMERA_FPS",           30, lo=1,  hi=60)
-REMOTE_CAMERA_WIDTH  = _clamp_env_int("REMOTE_CAMERA_WIDTH", 1280, lo=320)
-REMOTE_CAMERA_HEIGHT = _clamp_env_int("REMOTE_CAMERA_HEIGHT",  720, lo=240)
-REMOTE_CAMERA_FPS    = _clamp_env_int("REMOTE_CAMERA_FPS",     30, lo=1,  hi=60)
-LOCAL_JPEG_QUALITY   = _clamp_env_int("LOCAL_JPEG_QUALITY",    92, lo=1,  hi=100)
-REMOTE_JPEG_QUALITY  = _clamp_env_int("REMOTE_JPEG_QUALITY",   75, lo=1,  hi=100)
-STREAM_RELEASE_GRACE_SECONDS = float(os.environ.get("STREAM_RELEASE_GRACE_SECONDS", "2.0"))
-
-STREAM_PROFILES = {
-    "local": {
-        "width": CAMERA_WIDTH,
-        "height": CAMERA_HEIGHT,
-        "fps": CAMERA_FPS,
-        "quality": LOCAL_JPEG_QUALITY,
-    },
-    "remote": {
-        "width": REMOTE_CAMERA_WIDTH,
-        "height": REMOTE_CAMERA_HEIGHT,
-        "fps": REMOTE_CAMERA_FPS,
-        "quality": REMOTE_JPEG_QUALITY,
-    },
-}
-
 # ── Shutdown safety state ───────────────────────────────────────────────────
 _shutdown_lock = threading.Lock()
 _last_shutdown_request_at = 0.0
@@ -192,107 +145,6 @@ def _compute_local_addresses():
 _LOCAL_ADDRESSES = _compute_local_addresses()
 
 
-def _release_camera():
-    """Release the shared camera if it exists."""
-    global _camera, _current_mode
-    with _camera_lock:
-        if _camera is not None:
-            try:
-                _camera.release()
-            finally:
-                _camera = None
-                _current_mode = None
-
-
-def _cancel_release_timer():
-    """Cancel any pending delayed camera release."""
-    global _release_timer
-    with _stream_state_lock:
-        if _release_timer is not None:
-            _release_timer.cancel()
-            _release_timer = None
-
-
-def _schedule_camera_release():
-    """Delay camera shutdown briefly to avoid rapid off/on cycles during reconnects."""
-    global _release_timer
-
-    def _release_if_idle():
-        global _release_timer
-        with _stream_state_lock:
-            if _stream_client_modes:
-                _release_timer = None
-                return
-            _release_timer = None
-        _release_camera()
-
-    with _stream_state_lock:
-        if _release_timer is not None:
-            _release_timer.cancel()
-        _release_timer = threading.Timer(STREAM_RELEASE_GRACE_SECONDS, _release_if_idle)
-        _release_timer.daemon = True
-        _release_timer.start()
-
-
-def _configure_camera(camera, profile):
-    """Apply preferred camera properties for the active stream profile."""
-    settings = (
-        (cv2.CAP_PROP_BUFFERSIZE, 1, "buffer size"),
-        (cv2.CAP_PROP_FRAME_WIDTH, profile["width"], "width"),
-        (cv2.CAP_PROP_FRAME_HEIGHT, profile["height"], "height"),
-        (cv2.CAP_PROP_FPS, profile["fps"], "fps"),
-    )
-
-    for prop, value, label in settings:
-        applied = camera.set(prop, value)
-        if not applied:
-            if prop == cv2.CAP_PROP_BUFFERSIZE:
-                app.logger.debug("Camera backend does not support buffer size setting: %s", value)
-            else:
-                app.logger.warning("Unable to apply camera %s setting: %s", label, value)
-
-
-def _get_stream_mode():
-    """Choose the video stream profile for this request.
-
-    We use the Host header for stream quality selection because remote tunnel
-    traffic may still terminate locally and appear to originate from 127.0.0.1.
-    This helper is only for performance tuning, not authorization.
-    """
-    host = (request.host or "").split(":", 1)[0].strip().lower()
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        return "local"
-
-    client_ip = (request.remote_addr or "").strip()
-    if client_ip and client_ip not in _LOCAL_ADDRESSES:
-        return "remote"
-
-    return "remote" if host else "local"
-
-
-def _get_active_stream_mode():
-    """Prefer remote mode when any remote viewer is connected."""
-    with _stream_state_lock:
-        if not _stream_client_modes:
-            return None
-        if "remote" in _stream_client_modes.values():
-            return "remote"
-        return "local"
-
-
-def _remove_stream_client(sid):
-    """Remove a tracked stream client and release the camera when none remain."""
-    removed = False
-    with _stream_state_lock:
-        removed = _stream_client_modes.pop(sid, None) is not None
-        has_clients = bool(_stream_client_modes)
-
-    if removed and not has_clients:
-        _schedule_camera_release()
-
-    return removed
-
-
 def _is_local_request():
     """Allow only requests originating from this device."""
     client_ip = (request.remote_addr or "").strip()
@@ -308,104 +160,6 @@ def _shutdown_request_allowed():
             return False
         _last_shutdown_request_at = now
         return True
-
-
-def _get_camera(mode):
-    """Return a shared camera configured for the requested stream mode."""
-    global _camera, _current_mode
-    profile = STREAM_PROFILES[mode]
-
-    with _camera_lock:
-        if _camera is None or not _camera.isOpened():
-            camera = cv2.VideoCapture(CAMERA_INDEX)
-            if not camera or not camera.isOpened():
-                if camera is not None:
-                    camera.release()
-                raise RuntimeError("Unable to open camera device")
-            _camera = camera
-            _current_mode = None
-
-        if _current_mode != mode:
-            _configure_camera(_camera, profile)
-            _current_mode = mode
-
-    return _camera
-
-
-def _stream_frames():
-    """Capture frames and emit them to connected Socket.IO stream clients."""
-    global _stream_thread
-
-    while True:
-        mode = _get_active_stream_mode()
-        if mode is None:
-            with _stream_state_lock:
-                # Re-check inside the lock: a new client may have connected
-                # between the _get_active_stream_mode() call above and now.
-                if _stream_client_modes:
-                    continue
-                _stream_thread = None
-            return
-
-        profile = STREAM_PROFILES[mode]
-        interval = 1.0 / profile["fps"]
-        started_at = time.monotonic()
-
-        try:
-            cam = _get_camera(mode)
-        except RuntimeError as exc:
-            app.logger.error("Unable to start websocket stream: %s", exc)
-            socketio.emit(
-                "stream_status",
-                {"state": "error", "message": "Camera unavailable"},
-                namespace="/stream",
-            )
-            socketio.sleep(1.0)
-            continue
-
-        with _camera_lock:
-            ok, frame = cam.read()
-
-        if not ok:
-            app.logger.error("Camera frame capture failed; releasing camera")
-            _release_camera()
-            socketio.emit(
-                "stream_status",
-                {"state": "error", "message": "Camera unavailable"},
-                namespace="/stream",
-            )
-            socketio.sleep(0.25)
-            continue
-
-        ts_ms = int(time.time() * 1000)
-        with _stream_state_lock:
-            clients_snapshot = dict(_stream_client_modes)
-
-        local_sids  = [sid for sid, m in clients_snapshot.items() if m == "local"]
-        remote_sids = [sid for sid, m in clients_snapshot.items() if m == "remote"]
-
-        if remote_sids:
-            enc_ok, rem_jpeg = cv2.imencode(
-                ".jpg", frame,
-                [cv2.IMWRITE_JPEG_QUALITY, STREAM_PROFILES["remote"]["quality"]],
-            )
-            if enc_ok and rem_jpeg is not None:
-                payload = {"data": rem_jpeg.tobytes(), "server_ts_ms": ts_ms}
-                for sid in remote_sids:
-                    socketio.emit("frame", payload, namespace="/stream", to=sid)
-
-        if local_sids:
-            enc_ok, loc_jpeg = cv2.imencode(
-                ".jpg", frame,
-                [cv2.IMWRITE_JPEG_QUALITY, STREAM_PROFILES["local"]["quality"]],
-            )
-            if enc_ok and loc_jpeg is not None:
-                payload = {"data": loc_jpeg.tobytes(), "server_ts_ms": ts_ms}
-                for sid in local_sids:
-                    socketio.emit("frame", payload, namespace="/stream", to=sid)
-
-        elapsed = time.monotonic() - started_at
-        socketio.sleep(max(0, interval - elapsed))
 
 
 @app.route("/")
@@ -446,24 +200,6 @@ def samples():
 def remote():
     """Remote viewer page — shows the Pi's camera stream."""
     return render_template("remote.html")
-
-@socketio.on("connect", namespace="/stream")
-def stream_connect():
-    """Track stream clients and start the background emitter on first connect."""
-    global _stream_thread
-
-    mode = _get_stream_mode()
-    _cancel_release_timer()
-    with _stream_state_lock:
-        _stream_client_modes[request.sid] = mode
-        if _stream_thread is None:
-            _stream_thread = socketio.start_background_task(_stream_frames)
-
-
-@socketio.on("disconnect", namespace="/stream")
-def stream_disconnect():
-    """Remove stream clients; the emitter exits when none remain."""
-    _remove_stream_client(request.sid)
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")

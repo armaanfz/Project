@@ -1,6 +1,9 @@
-"""Minimal Flask route tests."""
+"""Flask route and safety regression tests."""
+from unittest.mock import Mock
+
 import pytest
-from app import app
+import app as app_module
+from app import app, socketio
 
 
 @pytest.fixture
@@ -10,9 +13,18 @@ def client():
         yield c
 
 
+@pytest.fixture(autouse=True)
+def reset_shutdown_state(monkeypatch):
+    monkeypatch.setattr(app_module, "_last_shutdown_request_at", 0.0)
+    monkeypatch.setattr(app_module, "_stream_client_modes", {})
+    monkeypatch.setattr(app_module, "_stream_thread", None)
+
+
 def test_home_returns_200(client):
     r = client.get("/")
     assert r.status_code == 200
+    assert b"replace-this-with-a-strong-secret" not in r.data
+    assert b"Access Remote Stream" in r.data
 
 
 def test_samples_returns_200(client):
@@ -20,6 +32,219 @@ def test_samples_returns_200(client):
     assert r.status_code == 200
 
 
+def test_remote_returns_200_and_includes_remote_controls(client):
+    response = client.get("/remote")
+
+    assert response.status_code == 200
+    assert b"Access Remote Stream" not in response.data
+    assert b"Remote Feed - Connecting..." in response.data
+    assert b"stream-canvas" in response.data
+    assert b"socket.io.min.js" in response.data
+    assert b"Tutorial" in response.data
+    assert b"Reset Zoom" in response.data
+    assert b"Mask" in response.data
+
+
+def test_get_stream_mode_uses_localhost_for_local_requests():
+    with app.test_request_context("/stream", base_url="http://localhost"):
+        assert app_module._get_stream_mode() == "local"
+
+
+def test_get_stream_mode_uses_remote_for_non_local_host():
+    with app.test_request_context("/stream", base_url="http://magnifier.example.com"):
+        assert app_module._get_stream_mode() == "remote"
+
+
+def test_socket_connect_starts_background_task(monkeypatch):
+    background_task = object()
+    start_task_mock = Mock(return_value=background_task)
+    monkeypatch.setattr(app_module.socketio, "start_background_task", start_task_mock)
+
+    client = socketio.test_client(app, namespace="/stream")
+
+    assert client.is_connected("/stream")
+    assert len(app_module._stream_client_modes) == 1
+    start_task_mock.assert_called_once_with(app_module._stream_frames)
+    client.disconnect(namespace="/stream")
+
+
+def test_socket_disconnect_removes_client(monkeypatch):
+    monkeypatch.setattr(app_module.socketio, "start_background_task", Mock(return_value=object()))
+
+    client = socketio.test_client(app, namespace="/stream")
+
+    assert len(app_module._stream_client_modes) == 1
+    client.disconnect(namespace="/stream")
+    assert app_module._stream_client_modes == {}
+
+
+def test_remove_stream_client_schedules_release_when_last_client_leaves(monkeypatch):
+    scheduled = {"called": False}
+    app_module._stream_client_modes = {"abc123": "remote"}
+
+    monkeypatch.setattr(app_module, "_schedule_camera_release", lambda: scheduled.__setitem__("called", True))
+
+    removed = app_module._remove_stream_client("abc123")
+
+    assert removed is True
+    assert app_module._stream_client_modes == {}
+    assert scheduled["called"] is True
+
+
+def test_remove_stream_client_returns_false_for_unknown_sid(monkeypatch):
+    monkeypatch.setattr(app_module, "_schedule_camera_release", Mock())
+
+    removed = app_module._remove_stream_client("missing")
+
+    assert removed is False
+
+
+def test_stream_frames_emits_latency_timestamp(monkeypatch):
+    class FakeCamera:
+        def read(self):
+            return True, object()
+
+    emitted = []
+    sleeps = []
+    active_modes = iter(["remote", None])
+
+    app_module._stream_client_modes["fake_sid"] = "remote"
+
+    def _fake_get_active_mode():
+        result = next(active_modes)
+        if result is None:
+            app_module._stream_client_modes.clear()
+        return result
+
+    monkeypatch.setattr(app_module, "_get_active_stream_mode", _fake_get_active_mode)
+    monkeypatch.setattr(app_module, "_get_camera", lambda mode: FakeCamera())
+    monkeypatch.setattr(app_module.cv2, "imencode", lambda *_args, **_kwargs: (True, Mock(tobytes=lambda: b"jpeg")))
+    monkeypatch.setattr(app_module.socketio, "emit", lambda event, payload, namespace=None, to=None: emitted.append((event, payload, namespace)))
+    monkeypatch.setattr(app_module.socketio, "sleep", lambda seconds: sleeps.append(seconds))
+
+    app_module._stream_frames()
+
+    frame_events = [event for event in emitted if event[0] == "frame"]
+    assert len(frame_events) == 1
+    assert "server_ts_ms" in frame_events[0][1]
+
+
 def test_home_tab_content_returns_200(client):
     r = client.get("/home-tab-content")
     assert r.status_code == 200
+
+
+def test_shutdown_rejects_non_local_requests(client):
+    response = client.post("/shutdown", environ_base={"REMOTE_ADDR": "10.0.0.9"})
+    assert response.status_code == 403
+
+
+def test_shutdown_accepts_local_requests_and_invokes_shutdown(monkeypatch, client):
+    run_mock = Mock()
+    popen_mock = Mock()
+
+    monkeypatch.setattr(app_module.subprocess, "run", run_mock)
+    monkeypatch.setattr(app_module.subprocess, "Popen", popen_mock)
+    monkeypatch.setattr(app_module.time, "sleep", lambda *_args, **_kwargs: None)
+
+    response = client.post("/shutdown", environ_base={"REMOTE_ADDR": "127.0.0.1"})
+
+    assert response.status_code == 200
+    run_mock.assert_called_once_with(["pkill", "chromium"], capture_output=True)
+    popen_mock.assert_called_once_with(["sudo", "shutdown", "-h", "now"])
+
+
+def test_shutdown_rate_limit_returns_429(monkeypatch, client):
+    monkeypatch.setattr(app_module, "SHUTDOWN_COOLDOWN_SECONDS", 30)
+    monkeypatch.setattr(app_module.subprocess, "run", Mock())
+    monkeypatch.setattr(app_module.subprocess, "Popen", Mock())
+    monkeypatch.setattr(app_module.time, "sleep", lambda *_args, **_kwargs: None)
+    response_one = client.post("/shutdown", environ_base={"REMOTE_ADDR": "127.0.0.1"})
+    response_two = client.post("/shutdown", environ_base={"REMOTE_ADDR": "127.0.0.1"})
+
+    assert response_one.status_code == 200
+    assert response_two.status_code == 429
+
+
+def test_active_stream_mode_prefers_remote_clients():
+    app_module._stream_client_modes = {"a": "local", "b": "remote"}
+    assert app_module._get_active_stream_mode() == "remote"
+
+
+def test_active_stream_mode_returns_none_without_clients():
+    app_module._stream_client_modes = {}
+    assert app_module._get_active_stream_mode() is None
+
+
+
+def test_get_camera_raises_when_device_cannot_open(monkeypatch):
+    class FakeCamera:
+        def isOpened(self):
+            return False
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr(app_module, "_camera", None)
+    monkeypatch.setattr(app_module.cv2, "VideoCapture", Mock(return_value=FakeCamera()))
+
+    with pytest.raises(RuntimeError):
+        app_module._get_camera("local")
+
+
+def test_get_camera_configures_opened_device(monkeypatch):
+    set_calls = []
+
+    class FakeCamera:
+        def isOpened(self):
+            return True
+
+        def set(self, prop, value):
+            set_calls.append((prop, value))
+            return True
+
+    monkeypatch.setattr(app_module, "_camera", None)
+    monkeypatch.setattr(app_module.cv2, "VideoCapture", Mock(return_value=FakeCamera()))
+
+    camera = app_module._get_camera("local")
+
+    assert camera is not None
+    assert set_calls == [
+        (app_module.cv2.CAP_PROP_BUFFERSIZE, 1),
+        (app_module.cv2.CAP_PROP_FRAME_WIDTH, app_module.STREAM_PROFILES["local"]["width"]),
+        (app_module.cv2.CAP_PROP_FRAME_HEIGHT, app_module.STREAM_PROFILES["local"]["height"]),
+        (app_module.cv2.CAP_PROP_FPS, app_module.STREAM_PROFILES["local"]["fps"]),
+    ]
+
+    app_module._camera = None
+
+
+def test_get_camera_reconfigures_when_mode_changes(monkeypatch):
+    set_calls = []
+
+    class FakeCamera:
+        def isOpened(self):
+            return True
+
+        def set(self, prop, value):
+            set_calls.append((prop, value))
+            return True
+
+    fake_camera = FakeCamera()
+    monkeypatch.setattr(app_module, "_camera", None)
+    monkeypatch.setattr(app_module, "_current_mode", None)
+    monkeypatch.setattr(app_module.cv2, "VideoCapture", Mock(return_value=fake_camera))
+
+    app_module._get_camera("local")
+    app_module._get_camera("remote")
+
+    assert set_calls == [
+        (app_module.cv2.CAP_PROP_BUFFERSIZE, 1),
+        (app_module.cv2.CAP_PROP_FRAME_WIDTH, app_module.STREAM_PROFILES["local"]["width"]),
+        (app_module.cv2.CAP_PROP_FRAME_HEIGHT, app_module.STREAM_PROFILES["local"]["height"]),
+        (app_module.cv2.CAP_PROP_FPS, app_module.STREAM_PROFILES["local"]["fps"]),
+        (app_module.cv2.CAP_PROP_BUFFERSIZE, 1),
+        (app_module.cv2.CAP_PROP_FRAME_WIDTH, app_module.STREAM_PROFILES["remote"]["width"]),
+        (app_module.cv2.CAP_PROP_FRAME_HEIGHT, app_module.STREAM_PROFILES["remote"]["height"]),
+        (app_module.cv2.CAP_PROP_FPS, app_module.STREAM_PROFILES["remote"]["fps"]),
+    ]

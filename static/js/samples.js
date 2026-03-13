@@ -1,4 +1,12 @@
 const videoElement = document.getElementById('video');
+const remoteCanvasElement = document.getElementById('stream-canvas');
+const remoteCanvasContext = remoteCanvasElement?.getContext('2d') ?? null;
+const viewerElement = videoElement || remoteCanvasElement;
+const isRemoteCanvasMode = !videoElement && !!remoteCanvasElement;
+
+// WeakSet used by _ensureMaskUIExists to track which mask buttons already have
+// their event listener attached, without polluting DOM element properties.
+const _barsMaskHookedButtons = new WeakSet();
 const videoContainer = document.getElementById('video-container');
 const menu = document.getElementById('menu');
 const zoomSlider = document.getElementById('zoom-slider');
@@ -16,6 +24,96 @@ const customFilters = {
     saturation: 100,
 };
 
+// ── Settings persistence ──────────────────────────────────────────────────────
+const _SETTINGS_KEY = 'magnifier_settings';
+
+function _saveSettings() {
+    try {
+        localStorage.setItem(_SETTINGS_KEY, JSON.stringify({
+            zoom: scale,
+            filterKey: (document.querySelector('.filter-btn[data-filter].active') || {}).dataset?.filter ?? 'normal',
+            customFilters: { ...customFilters },
+            mask: {
+                enabled: _barsMaskState.enabled,
+                barPct: _barsMaskState.barPct,
+                orientation: _barsMaskState.orientation,
+                inverted: _barsMaskState.inverted,
+            },
+        }));
+    } catch (_) { /* localStorage unavailable (private/incognito mode) */ }
+}
+
+function _restoreSettings() {
+    let saved;
+    try {
+        const raw = localStorage.getItem(_SETTINGS_KEY);
+        if (!raw) return;
+        saved = JSON.parse(raw);
+    } catch (_) { return; }
+
+    // Restore zoom
+    if (typeof saved.zoom === 'number' && saved.zoom >= 1) {
+        if (zoomSlider) zoomSlider.value = String(saved.zoom);
+        adjustZoom();
+    }
+
+    // Restore predefined filter
+    if (saved.filterKey) {
+        const filterFunctions = {
+            'normal': applyNormal,
+            'protanopia': applyProtanopia,
+            'deuteranopia': applyDeuteranopia,
+            'tritanopia': applyTritanopia,
+            'grayscale': applyGrayscale,
+            'inverted': applyInverted,
+            'inverted-grayscale': applyInvertedGrayscale,
+            'blue-on-yellow': applyBlueOnYellow,
+            'orange-on-black': applyNeonOrangeOnBlack,
+            'green-on-black': applyNeonGreenOnBlack,
+            'yellow-on-black': applyYellowOnBlack,
+            'purple-on-black': applyPurpleOnBlack,
+        };
+        const fn = filterFunctions[saved.filterKey];
+        if (fn) {
+            fn();
+            _setActiveFilterBtn(saved.filterKey);
+        }
+    }
+
+    // Restore custom filter sliders
+    if (saved.customFilters) {
+        ['hue', 'brightness', 'contrast', 'saturation'].forEach(key => {
+            if (typeof saved.customFilters[key] !== 'undefined') {
+                customFilters[key] = saved.customFilters[key];
+                const el = document.getElementById(key);
+                if (el) el.value = saved.customFilters[key];
+            }
+        });
+        applyCombinedFilters();
+    }
+
+    // Restore mask state
+    if (saved.mask) {
+        _barsMaskState.barPct = saved.mask.barPct ?? _barsMaskState.barPct;
+        _barsMaskState.orientation = saved.mask.orientation ?? _barsMaskState.orientation;
+        _barsMaskState.inverted = saved.mask.inverted ?? _barsMaskState.inverted;
+        const radiusEl = document.getElementById('mask-radius');
+        if (radiusEl) radiusEl.value = String(_barsMaskState.barPct);
+        updateMaskOrientationButton();
+        updateMaskInvertButton();
+        if (saved.mask.enabled) enableBarsMask();
+    }
+}
+
+function _setActiveFilterBtn(key) {
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+        const isActive = btn.dataset.filter === key;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+// ── End settings persistence ──────────────────────────────────────────────────
+
 const orientationBtn = document.getElementById('mask-orientation-btn');
 if (orientationBtn) {
   orientationBtn.addEventListener('click', () => {
@@ -28,6 +126,7 @@ if (orientationBtn) {
     // Update button label + redraw
     updateMaskOrientationButton();
     drawBarsMask();
+    _saveSettings();
   });
 }
 
@@ -48,6 +147,15 @@ let currentFilter = 'none';
 let isDragging = false; // Track dragging state
 let startX = 0; // Initial X position on drag start
 let startY = 0; // Initial Y position on drag start
+
+let _panRafId     = null; // rAF handle for batched pan updates
+let _pendingPanDx = 0;    // accumulated horizontal delta since last rAF
+let _pendingPanDy = 0;    // accumulated vertical   delta since last rAF
+
+// Pinch-to-zoom state (two-finger touch)
+let _pinching       = false;
+let _pinchStartDist = 0;
+let _pinchStartZoom = 1;
 
 /* ---------- Camera / 1080p helpers ---------- */
 /**
@@ -85,17 +193,26 @@ async function startCamera(videoEl, opts = {}) {
     videoEl.playsInline = true;
     videoEl.muted = true; // recommended for autoplay
 
-    // Wait for metadata so video.videoWidth/video.videoHeight are available
-    await new Promise((resolve) => {
-      if (videoEl.readyState >= 1 && videoEl.videoWidth && videoEl.videoHeight) {
-        return resolve();
-      }
-      function onMeta() {
-        videoEl.removeEventListener('loadedmetadata', onMeta);
-        resolve();
-      }
-      videoEl.addEventListener('loadedmetadata', onMeta);
-    });
+    // Wait for metadata so video.videoWidth/video.videoHeight are available.
+    // Race against a 5-second timeout so we don't hang indefinitely on slow cameras.
+    await Promise.race([
+      new Promise((resolve) => {
+        if (videoEl.readyState >= 1 && videoEl.videoWidth && videoEl.videoHeight) {
+          return resolve();
+        }
+        function onMeta() {
+          videoEl.removeEventListener('loadedmetadata', onMeta);
+          resolve();
+        }
+        videoEl.addEventListener('loadedmetadata', onMeta);
+      }),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error('Camera metadata timed out after 5 s')),
+          5000,
+        )
+      ),
+    ]);
 
     console.log('Camera started. Negotiated resolution:', videoEl.videoWidth, 'x', videoEl.videoHeight);
     return stream;
@@ -124,6 +241,130 @@ function setCanvasToVideoSize(canvas, videoEl, scale = 1.0) {
   canvas.style.height = `${Math.round(videoPixelH)}px`;
 }
 
+function resizeRemoteCanvas() {
+  if (!remoteCanvasElement) return;
+  remoteCanvasElement.width = window.innerWidth;
+  remoteCanvasElement.height = window.innerHeight;
+}
+
+function updateRemoteStatus(text, color = '#aaa', borderColor = '#555') {
+  const badge = document.getElementById('remote-status-badge');
+  if (!badge) return;
+  badge.textContent = text;
+  badge.style.color = color;
+  badge.style.borderColor = borderColor;
+}
+
+function formatRemoteStatus(baseText, latencyMs = null) {
+  if (typeof latencyMs !== 'number' || Number.isNaN(latencyMs)) {
+    return baseText;
+  }
+  return `${baseText} (${Math.max(0, Math.round(latencyMs))}ms)`;
+}
+
+function initializeRemoteSocketStream() {
+  if (!remoteCanvasElement || !remoteCanvasContext || typeof window.io !== 'function') {
+    updateRemoteStatus('Streaming unavailable', '#ff6b6b', '#ff6b6b');
+    return;
+  }
+
+  resizeRemoteCanvas();
+  window.addEventListener('resize', resizeRemoteCanvas);
+
+  const socket = window.io('/stream', {
+    transports: ['websocket'],
+    reconnectionDelay: 1000,
+    reconnectionAttempts: Infinity,
+    closeOnBeforeunload: true,
+  });
+  const frameImage = new Image();
+  let _prevFrameUrl = null;
+  const remoteStatusState = {
+    baseText: 'Remote Feed - Connecting...',
+    color: '#ff6b6b',
+    borderColor: '#ff6b6b',
+    latencyMs: null,
+  };
+
+  window.remoteStreamSocket = socket;
+
+  function renderRemoteStatus() {
+    updateRemoteStatus(
+      formatRemoteStatus(remoteStatusState.baseText, remoteStatusState.latencyMs),
+      remoteStatusState.color,
+      remoteStatusState.borderColor,
+    );
+  }
+
+  socket.on('connect', () => {
+    remoteStatusState.baseText = 'Remote Feed - Connected';
+    remoteStatusState.color = '#7CFC00';
+    remoteStatusState.borderColor = '#7CFC00';
+    remoteStatusState.latencyMs = null;
+    renderRemoteStatus();
+  });
+
+  socket.on('disconnect', () => {
+    remoteStatusState.baseText = 'Remote Feed - Reconnecting...';
+    remoteStatusState.color = '#ff6b6b';
+    remoteStatusState.borderColor = '#ff6b6b';
+    remoteStatusState.latencyMs = null;
+    renderRemoteStatus();
+  });
+
+  socket.on('stream_status', (payload) => {
+    if (payload?.state === 'error') {
+      remoteStatusState.baseText = `Remote Feed - ${payload.message || 'Camera unavailable'}`;
+      remoteStatusState.color = '#ff6b6b';
+      remoteStatusState.borderColor = '#ff6b6b';
+      remoteStatusState.latencyMs = null;
+      renderRemoteStatus();
+    }
+  });
+
+  socket.on('frame', (payload) => {
+    if (typeof payload?.server_ts_ms === 'number') {
+      remoteStatusState.baseText = 'Remote Feed - Connected';
+      remoteStatusState.color = '#7CFC00';
+      remoteStatusState.borderColor = '#7CFC00';
+      remoteStatusState.latencyMs = Date.now() - payload.server_ts_ms;
+      renderRemoteStatus();
+    }
+
+    frameImage.onload = () => {
+      remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+      remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+      if (_prevFrameUrl) {
+        URL.revokeObjectURL(_prevFrameUrl);
+        _prevFrameUrl = null;
+      }
+    };
+    const frameBlob = new Blob([payload.data], { type: 'image/jpeg' });
+    const frameUrl = URL.createObjectURL(frameBlob);
+    _prevFrameUrl = frameUrl;
+    frameImage.src = frameUrl;
+  });
+}
+
+function stopRemoteSocketStream() {
+  if (window.remoteStreamSocket && typeof window.remoteStreamSocket.disconnect === 'function') {
+    window.remoteStreamSocket.disconnect();
+    window.remoteStreamSocket = null;
+  }
+}
+
+function stopLocalCameraStream() {
+  if (videoElement?.srcObject && typeof videoElement.srcObject.getTracks === 'function') {
+    videoElement.srcObject.getTracks().forEach((track) => track.stop());
+    videoElement.srcObject = null;
+  }
+}
+
+function cleanupViewerResources() {
+  stopLocalCameraStream();
+  stopRemoteSocketStream();
+}
+
 /* Camera is started once in the async IIFE below; no duplicate DOMContentLoaded start here. */
 /* ---------- end camera / 1080p helpers ---------- */
 
@@ -137,17 +378,20 @@ videoContainer.addEventListener('mousedown', (e) => {
 });
 
 videoContainer.addEventListener('mousemove', (e) => {
-    if (isDragging) {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-
-        translateX += dx;
-        translateY += dy;
-
-        applyTransform(); // Apply transformations with constraints
-
-        startX = e.clientX;
-        startY = e.clientY;
+    if (!isDragging) return;
+    _pendingPanDx += e.clientX - startX;
+    _pendingPanDy += e.clientY - startY;
+    startX = e.clientX;
+    startY = e.clientY;
+    if (!_panRafId) {
+        _panRafId = requestAnimationFrame(() => {
+            translateX    += _pendingPanDx;
+            translateY    += _pendingPanDy;
+            _pendingPanDx  = 0;
+            _pendingPanDy  = 0;
+            _panRafId      = null;
+            applyTransform();
+        });
     }
 });
 
@@ -162,36 +406,65 @@ videoContainer.addEventListener('mouseleave', () => {
 });
 
 videoContainer.addEventListener('touchstart', (e) => {
-    isDragging = true;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-});
-
-videoContainer.addEventListener('touchmove', (e) => {
-    if (isDragging) {
-        const dx = e.touches[0].clientX - startX;
-        const dy = e.touches[0].clientY - startY;
-
-        translateX += dx;
-        translateY += dy;
-
-        applyTransform();
-
+    if (e.touches.length === 2) {
+        _pinching       = true;
+        isDragging      = false;
+        _pinchStartDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY,
+        );
+        _pinchStartZoom = scale;
+    } else {
+        _pinching  = false;
+        isDragging = true;
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
     }
 });
 
-videoContainer.addEventListener('touchend', () => {
-    isDragging = false;
+videoContainer.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (_pinching && e.touches.length === 2) {
+        const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY,
+        );
+        const minZ = parseFloat(zoomSlider?.min) || 1;
+        const maxZ = parseFloat(zoomSlider?.max) || 5;
+        const newZ = Math.round(
+            Math.max(minZ, Math.min(maxZ, _pinchStartZoom * (dist / _pinchStartDist))) * 10
+        ) / 10;
+        if (zoomSlider) zoomSlider.value = newZ;
+        adjustZoom();
+    } else if (isDragging && e.touches.length === 1) {
+        _pendingPanDx += e.touches[0].clientX - startX;
+        _pendingPanDy += e.touches[0].clientY - startY;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        if (!_panRafId) {
+            _panRafId = requestAnimationFrame(() => {
+                translateX    += _pendingPanDx;
+                translateY    += _pendingPanDy;
+                _pendingPanDx  = 0;
+                _pendingPanDy  = 0;
+                _panRafId      = null;
+                applyTransform();
+            });
+        }
+    }
+}, { passive: false });
+
+videoContainer.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2)  _pinching  = false;
+    if (e.touches.length === 0) isDragging = false;
 });
 
 // Constrain movement within bounds
 function constrainMovement() {
     const containerWidth = videoContainer.offsetWidth;
     const containerHeight = videoContainer.offsetHeight;
-    const videoWidth = videoElement.offsetWidth * scale;
-    const videoHeight = videoElement.offsetHeight * scale;
+    const videoWidth = viewerElement.offsetWidth * scale;
+    const videoHeight = viewerElement.offsetHeight * scale;
 
     // Determine the max translations to keep the video within bounds
     const maxTranslateX = (videoWidth - containerWidth) / 2;
@@ -224,7 +497,7 @@ window.centerView = centerView;
 // Apply transformations (zoom and pan)
 function applyTransform() {
     constrainMovement(); // Ensure panning stays within bounds
-    videoElement.style.transform = `translate(-50%, -50%) translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    viewerElement.style.transform = `translate(-50%, -50%) translate(${translateX}px, ${translateY}px) scale(${scale})`;
     updateCenterButtonVisibility();
 }
 
@@ -245,11 +518,11 @@ function adjustZoom() {
         zoomSlider.setAttribute('aria-valuenow', String(scale));
         zoomSlider.setAttribute('aria-valuetext', `Zoom ${scale.toFixed(1)}x`);
     }
+    _saveSettings();
 }
 
 // Change zoom via + / - buttons by delta (e.g., 0.1)
 function changeZoom(delta) {
-    const zoomSlider = document.getElementById('zoom-slider');
     const resetBtn = document.getElementById('reset-btn');
     if (!zoomSlider) return;
 
@@ -291,16 +564,26 @@ function applyCombinedFilters() {
     const predefinedFilter = currentFilter !== 'none' ? currentFilter : '';
     const adjustableFilter = `hue-rotate(${customFilters.hue}deg) brightness(${customFilters.brightness}%) contrast(${customFilters.contrast}%) saturate(${customFilters.saturation}%)`;
 
-    videoElement.style.filter = `${predefinedFilter} ${adjustableFilter}`.trim();
+    viewerElement.style.filter = `${predefinedFilter} ${adjustableFilter}`.trim();
 }
 
 // Adjustable Custom Filters
 function applyCustomFilter() {
-    customFilters.hue = document.getElementById('hue').value;
+    customFilters.hue        = document.getElementById('hue').value;
     customFilters.brightness = document.getElementById('brightness').value;
-    customFilters.contrast = document.getElementById('contrast').value;
+    customFilters.contrast   = document.getElementById('contrast').value;
     customFilters.saturation = document.getElementById('saturation').value;
     applyCombinedFilters();
+    // B — keep aria-valuetext in sync for screen readers
+    const hueEl        = document.getElementById('hue');
+    const brightnessEl = document.getElementById('brightness');
+    const contrastEl   = document.getElementById('contrast');
+    const saturationEl = document.getElementById('saturation');
+    if (hueEl)        hueEl.setAttribute('aria-valuetext',        `${customFilters.hue}\u00b0`);
+    if (brightnessEl) brightnessEl.setAttribute('aria-valuetext', `${customFilters.brightness}%`);
+    if (contrastEl)   contrastEl.setAttribute('aria-valuetext',   `${customFilters.contrast}%`);
+    if (saturationEl) saturationEl.setAttribute('aria-valuetext', `${customFilters.saturation}%`);
+    _saveSettings();
 }
 
 // Predefined Filters
@@ -310,6 +593,12 @@ function applyFilter(filter) {
 }
 
 (async () => {
+    if (isRemoteCanvasMode) {
+        applyTransform();
+        initializeRemoteSocketStream();
+        return;
+    }
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.error('getUserMedia is not supported in this browser');
         return;
@@ -317,18 +606,12 @@ function applyFilter(filter) {
 
     try {
         // startCamera will set videoElement.srcObject and wait for loadedmetadata
-        const stream = await startCamera(videoElement, { preferExact1080: false });
+        await startCamera(videoElement, { preferExact1080: false });
+
+        // Guard: if the element was removed while the async camera start was in progress, bail out.
+        if (!document.body.contains(videoElement)) return;
 
         // Stop camera when leaving the page (e.g. Back button) so the camera LED turns off
-        function stopCameraStream() {
-            if (videoElement.srcObject && typeof videoElement.srcObject.getTracks === 'function') {
-                videoElement.srcObject.getTracks().forEach((t) => t.stop());
-                videoElement.srcObject = null;
-            }
-        }
-        window.addEventListener('pagehide', stopCameraStream);
-        window.addEventListener('beforeunload', stopCameraStream);
-
         // Optional: after camera starts, align any overlay / processing canvases to the native video pixels
         const overlayIds = ['overlay-canvas', 'tritanopia-overlay-canvas'];
         overlayIds.forEach(id => {
@@ -339,6 +622,34 @@ function applyFilter(filter) {
         console.log('Camera stream active. Negotiated resolution (videoElement):', videoElement.videoWidth, 'x', videoElement.videoHeight);
     } catch (err) {
         console.error('Camera startup failed:', err);
+
+        const isPermissionDenied = err?.name === 'NotAllowedError';
+        const isNoDevice = err?.name === 'NotFoundError' || err?.name === 'NotReadableError';
+        const title = isPermissionDenied
+            ? 'Camera access was denied'
+            : isNoDevice
+            ? 'No camera found'
+            : 'Camera error';
+        const message = isPermissionDenied
+            ? 'Please allow camera access in your browser settings, then reload the page.'
+            : isNoDevice
+            ? 'Make sure the camera is connected and not in use by another app.'
+            : 'The camera could not be started. Try reloading the page.';
+
+        if (videoContainer) {
+            const errCard = document.createElement('div');
+            errCard.className = 'camera-error';
+            const h2 = document.createElement('h2');
+            h2.textContent = title;
+            const p = document.createElement('p');
+            p.textContent = message;
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'btn';
+            retryBtn.textContent = 'Retry';
+            retryBtn.addEventListener('click', () => window.location.reload());
+            errCard.append(h2, p, retryBtn);
+            videoContainer.appendChild(errCard);
+        }
     }
 })();
 
@@ -497,8 +808,13 @@ document.addEventListener('DOMContentLoaded', () => {
         'purple-on-black': applyPurpleOnBlack
     };
     document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
-        const fn = filterMap[btn.dataset.filter];
-        if (fn) btn.addEventListener('click', fn);
+        const key = btn.dataset.filter;
+        const fn = filterMap[key];
+        if (fn) btn.addEventListener('click', () => {
+            fn();
+            _setActiveFilterBtn(key);
+            _saveSettings();
+        });
     });
 
     // Custom filter sliders
@@ -525,12 +841,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize button state and zoom aria on page load
     updateResetButtonVisibility();
     adjustZoom();
+
+    // Persist save on resetZoom too
+    const _origResetZoom = window.resetZoom;
+    window.resetZoom = function () {
+        _origResetZoom();
+        _saveSettings();
+    };
 });
 
 // Back button function
 function goHome() {
+    cleanupViewerResources();
     window.location.href = "/";
 }
+
+window.addEventListener('pagehide', cleanupViewerResources);
+window.addEventListener('beforeunload', cleanupViewerResources);
 /* ---------- Robust letterbox mask (top + bottom bars) feature ----------
    Drop this whole block into samples.js after videoElement / video-container are defined.
    It will create missing UI if needed and ensures the mask canvas is inserted under UI.
@@ -554,7 +881,7 @@ const _barsMaskState = {
 function _ensureMaskUIExists() {
   // Ensure #controls exists
   let controls = document.getElementById('controls');
-  const videoContainer = document.getElementById('video-container') || videoElement.parentElement;
+  const videoContainer = document.getElementById('video-container') || viewerElement?.parentElement;
 
   // If no #controls, create one at bottom center of video-container
   if (!controls && videoContainer) {
@@ -622,6 +949,7 @@ function _ensureMaskUIExists() {
       input.addEventListener('input', (e) => {
         _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
         drawBarsMask();
+        _saveSettings();
       });
       maskControls.appendChild(input);
     }
@@ -629,9 +957,9 @@ function _ensureMaskUIExists() {
 
   // Hook button events if not hooked
   maskBtn = document.getElementById('mask-btn');
-  if (maskBtn && !maskBtn._barsMaskHooked) {
+  if (maskBtn && !_barsMaskHookedButtons.has(maskBtn)) {
     maskBtn.addEventListener('click', () => toggleBarsMask());
-    maskBtn._barsMaskHooked = true;
+    _barsMaskHookedButtons.add(maskBtn);
   }
 }
 
@@ -640,7 +968,7 @@ function _ensureMaskUIExists() {
 function createBarsMaskCanvas() {
   if (_barsMaskState.canvas) return;
 
-  const parent = document.getElementById('video-container') || videoElement.parentElement;
+  const parent = document.getElementById('video-container') || viewerElement?.parentElement;
   if (!parent) {
     console.warn('createBarsMaskCanvas: parent container not found');
     return;
@@ -648,11 +976,11 @@ function createBarsMaskCanvas() {
 
   // Ensure video is behind
   try {
-    if (videoElement && videoElement.style) {
-      videoElement.style.setProperty('z-index', '0', 'important');
+    if (viewerElement && viewerElement.style) {
+      viewerElement.style.setProperty('z-index', '0', 'important');
       // ensure it's positioned so z-index takes effect
-      if (getComputedStyle(videoElement).position === 'static') {
-        videoElement.style.position = 'absolute';
+      if (getComputedStyle(viewerElement).position === 'static') {
+        viewerElement.style.position = 'absolute';
       }
     }
   } catch (e) { /* ignore */ }
@@ -694,7 +1022,7 @@ function createBarsMaskCanvas() {
     const style = getComputedStyle(child);
 
     // If child is the video element, skip (we want video behind)
-    if (child === videoElement) return;
+    if (child === viewerElement) return;
 
     // Some elements have 'auto' z-index (NaN), treat as 0
     const z = parseInt(style.zIndex, 10);
@@ -717,7 +1045,7 @@ function createBarsMaskCanvas() {
   const neededZ = canvasZ + 1;
   Array.from(parent.children).forEach((child) => {
     if (!(child instanceof HTMLElement)) return;
-    if (child === canvas || child === videoElement) return;
+    if (child === canvas || child === viewerElement) return;
 
     // Ensure positioned so z-index applies
     const computed = getComputedStyle(child);
@@ -750,7 +1078,7 @@ function createBarsMaskCanvas() {
 
 function resizeBarsMaskCanvas() {
   if (!_barsMaskState.canvas) return;
-  const parent = document.getElementById('video-container') || videoElement.parentElement;
+  const parent = document.getElementById('video-container') || viewerElement?.parentElement;
   if (!parent) return;
   const rect = parent.getBoundingClientRect();
   // update canvas pixel buffer
@@ -766,6 +1094,9 @@ function drawBarsMask() {
   const ctx = _barsMaskState.ctx;
   const w = _barsMaskState.canvas.width;
   const h = _barsMaskState.canvas.height;
+
+  // K — skip drawing if the canvas has zero dimensions (avoids divide-by-zero)
+  if (w <= 0 || h <= 0) return;
 
   const pct = Math.max(0, Math.min(50, Number(_barsMaskState.barPct) || 0));
 
@@ -813,6 +1144,7 @@ function enableBarsMask() {
   drawBarsMask();
   updateMaskOrientationButton();
   updateMaskInvertButton();
+  _saveSettings();
 }
 
 function disableBarsMask() {
@@ -831,6 +1163,7 @@ function disableBarsMask() {
   if (controls) controls.style.display = 'none';
   const btn = document.getElementById('mask-btn');
   if (btn) btn.classList.remove('active'), btn.setAttribute('aria-pressed','false');
+  _saveSettings();
 }
 
 function toggleBarsMask() {
@@ -848,17 +1181,12 @@ function updateMaskInvertButton() {
 function setupBarsMaskFeature() {
   try {
     _ensureMaskUIExists();
-    // ensure slider event already wired by _ensureMaskUIExists, but double-check:
+    // Sync slider attributes with current state (listener already wired by _ensureMaskUIExists).
     const radiusEl = document.getElementById('mask-radius');
     if (radiusEl) {
       radiusEl.min = '0';
       radiusEl.max = '48';
       radiusEl.value = String(_barsMaskState.barPct || 5);
-
-      radiusEl.addEventListener('input', (e) => {
-        _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
-        drawBarsMask();
-      });
     }
   } catch (err) {
     console.warn('setupBarsMaskFeature error', err);
@@ -871,12 +1199,27 @@ if (invertBtn) {
     _barsMaskState.inverted = !_barsMaskState.inverted;
     updateMaskInvertButton();
     drawBarsMask();
+    _saveSettings();
+  });
+}
+
+// Wire the mask-radius slider for pages that already have it in the HTML.
+// _ensureMaskUIExists() only attaches the listener when it creates the element
+// dynamically; if the element exists in the HTML it is skipped, so we wire it
+// here at module scope (script is deferred, so the DOM is ready).
+const _maskRadiusEl = document.getElementById('mask-radius');
+if (_maskRadiusEl) {
+  _maskRadiusEl.addEventListener('input', (e) => {
+    _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
+    drawBarsMask();
+    _saveSettings();
   });
 }
 
 // initialize (call once)
 document.addEventListener('DOMContentLoaded', () => {
   setupBarsMaskFeature();
+  _restoreSettings();
 
   let overlay, box, textEl, highlight;
   let stepIndex = 0;
@@ -1029,6 +1372,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderStep() {
     const step = steps[stepIndex];
+    if (!step) return;
     textEl.textContent = step.text;
 
     if (typeof step.before === "function") {
@@ -1066,4 +1410,43 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById("tutorial-btn")?.addEventListener("click", () => {
     if (!overlay) createTutorial();
   });
+});
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  // Do not fire shortcuts when focus is inside a text input or slider
+  const tag = (e.target?.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return;
+
+  switch (e.key) {
+    case '+':
+    case '=':
+      e.preventDefault();
+      changeZoom(0.1);
+      break;
+    case '-':
+      e.preventDefault();
+      changeZoom(-0.1);
+      break;
+    case '0':
+      e.preventDefault();
+      if (typeof window.resetZoom === 'function') window.resetZoom();
+      break;
+    case 'f':
+    case 'F':
+      e.preventDefault();
+      if (typeof toggleMenu === 'function') toggleMenu();
+      break;
+    case 'm':
+    case 'M':
+      e.preventDefault();
+      if (typeof toggleBarsMask === 'function') toggleBarsMask();
+      break;
+    case 'Escape':
+      if (menu && menu.classList.contains('active')) {
+        e.preventDefault();
+        menu.classList.remove('active');
+      }
+      break;
+  }
 });

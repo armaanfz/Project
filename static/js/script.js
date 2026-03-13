@@ -25,7 +25,7 @@ async function loadTabContent() {
         }
     }
 
-    const response = await fetch(`/home-tab-content?_=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch('/home-tab-content', { cache: "no-store" });
     if (!response.ok) {
         throw new Error(`Failed to load tab content: ${response.status}`);
     }
@@ -57,7 +57,11 @@ async function showInfo(infoType) {
 function setActiveTab(activeTab) {
     document.querySelectorAll('a[data-tab]').forEach((link) => {
         const isActive = link.dataset.tab === activeTab;
-        link.setAttribute('aria-current', isActive ? 'page' : null);
+        if (isActive) {
+            link.setAttribute('aria-current', 'page');
+        } else {
+            link.removeAttribute('aria-current');
+        }
         link.classList.toggle('nav-active', isActive);
     });
 }
@@ -75,6 +79,13 @@ window.addEventListener('DOMContentLoaded', () => {
     if (startButton) {
         startButton.addEventListener('click', () => {
             window.location.href = startButton.dataset.samplesUrl;
+        });
+    }
+
+    const remoteButton = document.getElementById('start-remote-btn');
+    if (remoteButton) {
+        remoteButton.addEventListener('click', () => {
+            window.location.href = remoteButton.dataset.remoteUrl;
         });
     }
 

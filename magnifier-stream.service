@@ -1,4 +1,4 @@
-# Magnifier stream server — asyncio WebSocket camera broadcaster (port 5001)
+# Magnifier stream server — asyncio WebSocket camera broadcaster (port 8000)
 #
 # Installation on Raspberry Pi:
 #   sudo cp magnifier-stream.service /etc/systemd/system/

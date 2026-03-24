@@ -14,3 +14,10 @@ __pycache__/
 venv/
 .venv/
 env/
+
+# Downloaded binaries
+cloudflared
+caddy.exe
+
+# Reports
+.reports/

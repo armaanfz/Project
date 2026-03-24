@@ -2,14 +2,14 @@
 
 Tests for the Socket.IO /stream namespace handlers were removed in Stage 2 of
 the streaming migration when that namespace was replaced by the standalone
-asyncio WebSocket server (stream_server.py on port 5001).  Camera and streaming
+asyncio WebSocket server (stream_server.py on port 8000).  Camera and streaming
 unit tests now belong in a separate test_stream_server.py module.
 """
 from unittest.mock import Mock
 
 import pytest
 import app as app_module
-from app import app, socketio
+from app import app
 
 
 @pytest.fixture

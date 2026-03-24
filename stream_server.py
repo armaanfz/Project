@@ -1,18 +1,14 @@
 """asyncio-based WebSocket camera streaming server.
 
-Runs an independent WebSocket server on port 5001 that broadcasts JPEG frames
-from the local camera to all connected viewers.
+Runs the unified entry point on port 8000. WebSocket connections to /ws are
+handled directly (camera frames); all other HTTP requests are proxied to
+Flask on port 5000.
 
 Binary frame protocol
 ---------------------
 Each message is a raw bytes payload:
   [0:8]  big-endian signed int64 — server timestamp in milliseconds (Unix epoch)
   [8:]   JPEG-encoded frame data
-
-NOTE: Remote WebSocket access through the Cloudflare tunnel will fail until a
-reverse proxy (e.g., Caddy) routes /ws to port 5001. This is an intentional
-known gap after Stage 3 of the streaming migration; Stage 4 (Caddy integration)
-closes it.
 """
 import asyncio
 import cv2

@@ -291,9 +291,9 @@ function initializeRemoteSocketStream() {
   function connect() {
     // Use wss:// when the page is served over HTTPS (e.g. through the Cloudflare
     // tunnel), ws:// for plain HTTP (local access).
-    // The proxy routes /ws → stream server port 5001; use window.location.host
-    // so the URL works both locally (ws://localhost/ws) and through the tunnel
-    // (wss://your-tunnel.trycloudflare.com/ws).
+    // stream_server.py handles /ws directly on port 8000; use window.location.host
+    // so the URL works both locally (ws://localhost:8000/ws) and through the
+    // tunnel (wss://your-tunnel.trycloudflare.com/ws).
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${proto}//${window.location.host}/ws`;
     const socket = new WebSocket(wsUrl);
@@ -1334,21 +1334,21 @@ document.addEventListener('DOMContentLoaded', () => {
     highlight.style.display = "none";
     document.body.append(highlight);
 
-    backBtn.onclick = () => {
+    backBtn.addEventListener('click', () => {
       if (stepIndex > 0) stepIndex--;
       renderStep();
-    };
+    });
 
-    nextBtn.onclick = () => {
+    nextBtn.addEventListener('click', () => {
       if (stepIndex < steps.length - 1) {
         stepIndex++;
         renderStep();
       } else {
         endTutorial();
       }
-    };
+    });
 
-    skipBtn.onclick = endTutorial;
+    skipBtn.addEventListener('click', endTutorial);
 
     renderStep();
   }

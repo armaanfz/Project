@@ -67,6 +67,38 @@ Cloudflare tunnel → :8000
 | `REMOTE_JPEG_QUALITY` | `75` | Remote JPEG quality |
 | `SHUTDOWN_COOLDOWN_SECONDS` | `30` | Min seconds between shutdown calls |
 
+## Testing
+
+```bash
+pip install -r requirements-dev.txt   # adds pytest
+pytest                                  # run all tests
+pytest tests/test_app.py -v            # verbose
+```
+
+Tests live in `tests/test_app.py` and cover Flask routes. Camera/streaming tests belong in a separate `tests/test_stream_server.py` (not yet written).
+
+## Common Development Tasks
+
+| Task | Command |
+|---|---|
+| Run full app | `python app.py` |
+| Run stream server only | `python stream_server.py` |
+| Run tests | `pytest` |
+| Install runtime deps | `pip install -r requirements.txt` |
+| Install dev deps | `pip install -r requirements-dev.txt` |
+
+## Where to Look
+
+| I want to... | Look at... |
+|---|---|
+| Change zoom/filter/mask logic | `static/js/samples.js` |
+| Change remote stream rendering | `templates/remote.html` |
+| Add a Flask route | `app.py` |
+| Tune camera quality/resolution | `stream_server.py` env-var defaults at top |
+| Change tunnel or shutdown logic | `app.py:_start_tunnel()`, `app.py:shutdown()` |
+| Add a route test | `tests/test_app.py` |
+
 ## Pi Deployment
 
 Systemd services: `magnifier-stream.service` (stream_server) and a `magnifier.service` for Flask. `app.py` also launches them as subprocess fallbacks, so harmless if systemd is already running them.
+

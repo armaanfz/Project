@@ -9,21 +9,6 @@ import urllib.request
 import threading
 import logging
 from flask import Flask, render_template, request
-from flask_socketio import SocketIO
-
-
-def _default_socketio_async_mode():
-    """Choose a safer default async backend for the current platform.
-
-    gevent is a good production fit for Linux/Raspberry Pi deployments, but it
-    can be unstable in this project's current Windows development environment.
-    Allow an explicit env override, otherwise default to threading on Windows
-    and gevent elsewhere.
-    """
-    configured = os.environ.get("SOCKETIO_ASYNC_MODE", "").strip().lower()
-    if configured:
-        return configured
-    return "threading" if sys.platform.startswith("win") else "gevent"
 
 _log = logging.getLogger(__name__)
 
@@ -137,11 +122,6 @@ threading.Thread(target=_start_stream_server, daemon=True).start()
 threading.Thread(target=_start_tunnel, daemon=True).start()
 
 app = Flask(__name__)
-socketio = SocketIO(
-    app,
-    async_mode=_default_socketio_async_mode(),
-    cors_allowed_origins="*",
-)
 
 # ── Shutdown safety state ───────────────────────────────────────────────────
 _shutdown_lock = threading.Lock()
@@ -222,9 +202,4 @@ def remote():
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
-    run_kwargs = {"debug": debug, "host": "0.0.0.0", "port": 5000}
-    # allow_unsafe_werkzeug is Werkzeug-specific; passing it to gevent (Pi/Linux)
-    # leaks into gevent's ssl_args and causes a TypeError inside wrap_socket().
-    if _default_socketio_async_mode() == "threading":
-        run_kwargs["allow_unsafe_werkzeug"] = True
-    socketio.run(app, **run_kwargs)
+    app.run(debug=debug, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)

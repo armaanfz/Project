@@ -247,12 +247,11 @@ function resizeRemoteCanvas() {
   remoteCanvasElement.height = window.innerHeight;
 }
 
-function updateRemoteStatus(text, color = '#aaa', borderColor = '#555') {
+function updateRemoteStatus(text, state = 'default') {
   const badge = document.getElementById('remote-status-badge');
   if (!badge) return;
   badge.textContent = text;
-  badge.style.color = color;
-  badge.style.borderColor = borderColor;
+  badge.dataset.state = state;
 }
 
 function formatRemoteStatus(baseText, latencyMs = null) {
@@ -264,7 +263,7 @@ function formatRemoteStatus(baseText, latencyMs = null) {
 
 function initializeRemoteSocketStream() {
   if (!remoteCanvasElement || !remoteCanvasContext || typeof window.io !== 'function') {
-    updateRemoteStatus('Streaming unavailable', '#ff6b6b', '#ff6b6b');
+    updateRemoteStatus('Streaming unavailable', 'error');
     return;
   }
 
@@ -281,8 +280,7 @@ function initializeRemoteSocketStream() {
   let _prevFrameUrl = null;
   const remoteStatusState = {
     baseText: 'Remote Feed - Connecting...',
-    color: '#ff6b6b',
-    borderColor: '#ff6b6b',
+    state: 'default',
     latencyMs: null,
   };
 
@@ -291,23 +289,23 @@ function initializeRemoteSocketStream() {
   function renderRemoteStatus() {
     updateRemoteStatus(
       formatRemoteStatus(remoteStatusState.baseText, remoteStatusState.latencyMs),
-      remoteStatusState.color,
-      remoteStatusState.borderColor,
+      remoteStatusState.state,
     );
   }
 
   socket.on('connect', () => {
+    // Clear any stale frame from a previous session before live frames arrive.
+    remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+    if (_prevFrameUrl) { URL.revokeObjectURL(_prevFrameUrl); _prevFrameUrl = null; }
     remoteStatusState.baseText = 'Remote Feed - Connected';
-    remoteStatusState.color = '#7CFC00';
-    remoteStatusState.borderColor = '#7CFC00';
+    remoteStatusState.state = 'connected';
     remoteStatusState.latencyMs = null;
     renderRemoteStatus();
   });
 
   socket.on('disconnect', () => {
     remoteStatusState.baseText = 'Remote Feed - Reconnecting...';
-    remoteStatusState.color = '#ff6b6b';
-    remoteStatusState.borderColor = '#ff6b6b';
+    remoteStatusState.state = 'error';
     remoteStatusState.latencyMs = null;
     renderRemoteStatus();
   });
@@ -315,8 +313,7 @@ function initializeRemoteSocketStream() {
   socket.on('stream_status', (payload) => {
     if (payload?.state === 'error') {
       remoteStatusState.baseText = `Remote Feed - ${payload.message || 'Camera unavailable'}`;
-      remoteStatusState.color = '#ff6b6b';
-      remoteStatusState.borderColor = '#ff6b6b';
+      remoteStatusState.state = 'error';
       remoteStatusState.latencyMs = null;
       renderRemoteStatus();
     }
@@ -325,8 +322,7 @@ function initializeRemoteSocketStream() {
   socket.on('frame', (payload) => {
     if (typeof payload?.server_ts_ms === 'number') {
       remoteStatusState.baseText = 'Remote Feed - Connected';
-      remoteStatusState.color = '#7CFC00';
-      remoteStatusState.borderColor = '#7CFC00';
+      remoteStatusState.state = 'connected';
       remoteStatusState.latencyMs = Date.now() - payload.server_ts_ms;
       renderRemoteStatus();
     }
@@ -1319,21 +1315,21 @@ document.addEventListener('DOMContentLoaded', () => {
     highlight.style.display = "none";
     document.body.append(highlight);
 
-    backBtn.onclick = () => {
+    backBtn.addEventListener('click', () => {
       if (stepIndex > 0) stepIndex--;
       renderStep();
-    };
+    });
 
-    nextBtn.onclick = () => {
+    nextBtn.addEventListener('click', () => {
       if (stepIndex < steps.length - 1) {
         stepIndex++;
         renderStep();
       } else {
         endTutorial();
       }
-    };
+    });
 
-    skipBtn.onclick = endTutorial;
+    skipBtn.addEventListener('click', endTutorial);
 
     renderStep();
   }

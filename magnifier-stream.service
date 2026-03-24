@@ -1,0 +1,27 @@
+# Magnifier stream server — asyncio WebSocket camera broadcaster (port 8000)
+#
+# Installation on Raspberry Pi:
+#   sudo cp magnifier-stream.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable magnifier-stream
+#   sudo systemctl start magnifier-stream
+#   sudo systemctl status magnifier-stream
+#
+# This service is independent of the Flask app service (magnifier.service).
+# Both start at boot and can be restarted individually.
+
+[Unit]
+Description=Magnifier asyncio WebSocket stream server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/magnifier
+ExecStart=/home/pi/magnifier/venv/bin/python stream_server.py
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

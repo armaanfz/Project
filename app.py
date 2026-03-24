@@ -133,6 +133,8 @@ _stream_state_lock = threading.Lock()
 _stream_client_modes = {}
 _stream_thread = None
 _release_timer = None
+
+
 def _clamp_env_int(name, default, lo=None, hi=None):
     """Parse an integer env var with optional lower/upper bounds."""
     try:
@@ -144,6 +146,7 @@ def _clamp_env_int(name, default, lo=None, hi=None):
     if hi is not None:
         v = min(hi, v)
     return v
+
 
 CAMERA_INDEX         = _clamp_env_int("CAMERA_INDEX",          0, lo=0)
 CAMERA_WIDTH         = _clamp_env_int("CAMERA_WIDTH",       1920, lo=320)
@@ -177,7 +180,6 @@ _last_shutdown_request_at = 0.0
 SHUTDOWN_COOLDOWN_SECONDS = int(os.environ.get("SHUTDOWN_COOLDOWN_SECONDS", "30"))
 
 # ── Local address cache ─────────────────────────────────────────────────────
-# Computed once at startup to avoid a DNS lookup on every request.
 def _compute_local_addresses():
     """Return the set of IP addresses that belong to this machine."""
     addresses = {"127.0.0.1", "::1"}
@@ -257,7 +259,6 @@ def _get_stream_mode():
 
     We use the Host header for stream quality selection because remote tunnel
     traffic may still terminate locally and appear to originate from 127.0.0.1.
-    This helper is only for performance tuning, not authorization.
     """
     host = (request.host or "").split(":", 1)[0].strip().lower()
     if host in {"localhost", "127.0.0.1", "::1"}:
@@ -317,7 +318,9 @@ def _get_camera(mode):
 
     with _camera_lock:
         if _camera is None or not _camera.isOpened():
-            camera = cv2.VideoCapture(CAMERA_INDEX)
+            # Force DirectShow on Windows to avoid MSMF black-frame bug
+            backend = cv2.CAP_DSHOW if sys.platform.startswith("win") else cv2.CAP_ANY
+            camera = cv2.VideoCapture(CAMERA_INDEX, backend)
             if not camera or not camera.isOpened():
                 if camera is not None:
                     camera.release()
@@ -340,8 +343,6 @@ def _stream_frames():
         mode = _get_active_stream_mode()
         if mode is None:
             with _stream_state_lock:
-                # Re-check inside the lock: a new client may have connected
-                # between the _get_active_stream_mode() call above and now.
                 if _stream_client_modes:
                     continue
                 _stream_thread = None
@@ -354,7 +355,7 @@ def _stream_frames():
         try:
             cam = _get_camera(mode)
         except RuntimeError as exc:
-            app.logger.error("Unable to start websocket stream: %s", exc)
+            app.logger.error("Unable to start stream: %s", exc)
             socketio.emit(
                 "stream_status",
                 {"state": "error", "message": "Camera unavailable"},
@@ -412,6 +413,7 @@ def _stream_frames():
 def index():
     return render_template("index.html")
 
+
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
     if not _is_local_request():
@@ -420,7 +422,6 @@ def shutdown():
         return "Too Many Requests", 429
 
     def _do_shutdown():
-        # Close Chromium gracefully before shutting down (Raspberry Pi default browser)
         subprocess.run(["pkill", "chromium"], capture_output=True)
         time.sleep(2)
         subprocess.Popen(["sudo", "shutdown", "-h", "now"])
@@ -428,14 +429,17 @@ def shutdown():
     threading.Thread(target=_do_shutdown, daemon=True).start()
     return "Shutting down...", 200
 
+
 @app.route("/tunnel-status")
 def tunnel_status():
     with _tunnel_lock:
         return {"status": _tunnel_status, "url": _tunnel_url}
 
+
 @app.route("/home-tab-content")
 def home_tab_content():
     return render_template("home_tab_content.html")
+
 
 @app.route("/samples")
 def samples():
@@ -446,6 +450,7 @@ def samples():
 def remote():
     """Remote viewer page — shows the Pi's camera stream."""
     return render_template("remote.html")
+
 
 @socketio.on("connect", namespace="/stream")
 def stream_connect():
@@ -465,11 +470,10 @@ def stream_disconnect():
     """Remove stream clients; the emitter exits when none remain."""
     _remove_stream_client(request.sid)
 
+
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
     run_kwargs = {"debug": debug, "host": "0.0.0.0", "port": 5000}
-    # allow_unsafe_werkzeug is Werkzeug-specific; passing it to gevent (Pi/Linux)
-    # leaks into gevent's ssl_args and causes a TypeError inside wrap_socket().
     if _default_socketio_async_mode() == "threading":
         run_kwargs["allow_unsafe_werkzeug"] = True
     socketio.run(app, **run_kwargs)

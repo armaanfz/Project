@@ -16,9 +16,11 @@ closes it.
 """
 import asyncio
 import cv2
+import http.client
 import logging
 import os
 import struct
+import sys
 import time
 import websockets
 import websockets.exceptions
@@ -77,6 +79,14 @@ _viewers_lock = None   # asyncio.Lock — initialised in start_stream_server()
 _camera = None
 _camera_lock = None    # asyncio.Lock — initialised in start_stream_server()
 
+# Consecutive black-frame counter used by _broadcast_frames to trigger reinit.
+_black_frame_count = 0
+
+# Number of frames to discard after opening the camera to flush
+# initialization buffers.  Both MSMF and DirectShow routinely return black
+# frames for the first few reads after a resolution change.
+_CAMERA_WARMUP_FRAMES = 30
+
 # ── Camera helpers ─────────────────────────────────────────────────────────────
 
 def _configure_camera(camera, profile):
@@ -102,12 +112,32 @@ async def _open_camera(mode):
     loop = asyncio.get_event_loop()
     async with _camera_lock:
         if _camera is None or not _camera.isOpened():
-            camera = await loop.run_in_executor(None, cv2.VideoCapture, CAMERA_INDEX)
+            if sys.platform.startswith("win"):
+                camera = await loop.run_in_executor(
+                    None, cv2.VideoCapture, CAMERA_INDEX, cv2.CAP_DSHOW
+                )
+            else:
+                camera = await loop.run_in_executor(None, cv2.VideoCapture, CAMERA_INDEX)
             if not camera or not camera.isOpened():
                 if camera is not None:
                     camera.release()
                 raise RuntimeError("Unable to open camera device")
             _configure_camera(camera, STREAM_PROFILES[mode])
+
+            # Flush initialization frames.  The camera driver (MSMF or
+            # DirectShow) often returns black or stale frames for the first
+            # several reads after the device is opened and configured.
+            def _warm_up(cam, n):
+                for _ in range(n):
+                    cam.read()
+
+            await loop.run_in_executor(None, _warm_up, camera, _CAMERA_WARMUP_FRAMES)
+
+            backend = int(camera.get(cv2.CAP_PROP_BACKEND)) if hasattr(cv2, "CAP_PROP_BACKEND") else -1
+            _log.info(
+                "Camera ready (index=%d backend=%d warmup=%d frames)",
+                CAMERA_INDEX, backend, _CAMERA_WARMUP_FRAMES,
+            )
             _camera = camera
 
 
@@ -115,7 +145,13 @@ async def _open_camera(mode):
 
 async def _broadcast_frames():
     """Read camera frames and distribute them to all connected viewer queues."""
+    global _camera, _black_frame_count
     loop = asyncio.get_event_loop()
+
+    # Threshold below which a frame is considered black (max channel value).
+    _BLACK_THRESHOLD = 5
+    # Consecutive black frames before triggering a camera reinitialisation.
+    _BLACK_REINIT_AFTER = 90  # ~3 s at 30 fps
 
     while True:
         async with _viewers_lock:
@@ -138,10 +174,37 @@ async def _broadcast_frames():
 
         cam = _camera
         ok, frame = await loop.run_in_executor(None, cam.read)
-        if not ok:
-            _log.warning("Camera frame capture failed; waiting before retry")
-            await asyncio.sleep(0.25)
+
+        # ── Black-frame / capture-failure detection ────────────────────────
+        is_black = ok and frame is not None and int(frame.max()) < _BLACK_THRESHOLD
+        if not ok or is_black:
+            _black_frame_count += 1
+            if not ok:
+                _log.warning("Camera frame capture failed (%d); retrying", _black_frame_count)
+                await asyncio.sleep(0.25)
+            else:
+                if _black_frame_count % 30 == 1:
+                    _log.warning(
+                        "Black frame detected (%d consecutive); reinit after %d",
+                        _black_frame_count, _BLACK_REINIT_AFTER,
+                    )
+                await asyncio.sleep(interval)
+
+            if _black_frame_count >= _BLACK_REINIT_AFTER:
+                _log.warning("Reinitialising camera after %d bad frames", _black_frame_count)
+                async with _camera_lock:
+                    if _camera is cam:
+                        await loop.run_in_executor(None, cam.release)
+                        _camera = None
+                _black_frame_count = 0
+                try:
+                    await _open_camera(active_mode)
+                except Exception as exc:
+                    _log.error("Camera reinit failed: %s", exc)
             continue
+
+        _black_frame_count = 0
+        # ── Encode and distribute ──────────────────────────────────────────
 
         ts_ms = int(time.time() * 1000)
         quality = profile["quality"]
@@ -162,6 +225,46 @@ async def _broadcast_frames():
                 pass  # drop frame for this slow viewer; prevents memory growth
 
         await asyncio.sleep(interval)
+
+
+# ── HTTP proxy coroutine ────────────────────────────────────────────────────────
+
+async def _proxy_http(connection, request):
+    """Forward non-WebSocket HTTP requests to Flask on port 5000.
+
+    Called by websockets.serve as the process_request hook.  Returns None to
+    let websockets complete the WebSocket handshake; returns a Response object
+    to short-circuit the connection with an HTTP reply.
+    """
+    if request.headers.get("upgrade", "").lower() == "websocket":
+        return None  # let websockets handle the upgrade
+
+    loop = asyncio.get_event_loop()
+
+    def _fetch():
+        # websockets 16 only accepts GET requests; method is always GET here.
+        skip = {"connection", "upgrade", "host", "transfer-encoding"}
+        headers = {k: v for k, v in request.headers.items()
+                   if k.lower() not in skip}
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", 5000, timeout=15)
+            conn.request("GET", request.path, None, headers)
+            resp = conn.getresponse()
+            resp_body = resp.read()
+            resp_status = resp.status
+            resp_headers = list(resp.getheaders())
+            conn.close()
+            return resp_status, resp_headers, resp_body
+        except Exception as exc:
+            _log.error("HTTP proxy error: %s", exc)
+            return 502, [], b"Bad Gateway"
+
+    status, flask_headers, body = await loop.run_in_executor(None, _fetch)
+
+    from websockets.http11 import Response, Headers
+    keep = [(k, v) for k, v in flask_headers
+            if k.lower() not in ("transfer-encoding", "connection")]
+    return Response(status, "OK", Headers(keep), body)
 
 
 # ── Connection handler coroutine ───────────────────────────────────────────────
@@ -203,7 +306,21 @@ async def start_stream_server():
     await _open_camera("local")
     asyncio.create_task(_broadcast_frames())
 
-    server = await websockets.serve(handle_connection, "127.0.0.1", 5001)
+    try:
+        server = await websockets.serve(
+            handle_connection,
+            "0.0.0.0",
+            8000,
+            process_request=_proxy_http,
+        )
+    except OSError as exc:
+        _log.error(
+            "Cannot bind port 8000: %s — kill any existing stream_server.py "
+            "process (e.g. `taskkill /F /IM python.exe` on Windows) and retry.",
+            exc,
+        )
+        raise
+    _log.info("Stream server listening on 0.0.0.0:8000")
     await server.serve_forever()
 
 

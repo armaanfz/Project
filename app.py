@@ -7,6 +7,7 @@ import sys
 import time
 import urllib.request
 import threading
+import logging
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO
 
@@ -23,6 +24,8 @@ def _default_socketio_async_mode():
     if configured:
         return configured
     return "threading" if sys.platform.startswith("win") else "gevent"
+
+_log = logging.getLogger(__name__)
 
 # ── Cloudflare tunnel state ──────────────────────────────────────────────────
 _tunnel_url    = None
@@ -74,7 +77,7 @@ def _start_tunnel():
     def _run(cf_cmd):
         """Start cloudflared and return (url, status) once the URL is known."""
         proc = subprocess.Popen(
-            [cf_cmd, "tunnel", "--url", "http://localhost:5000"],
+            [cf_cmd, "tunnel", "--url", "http://localhost:8000"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -115,6 +118,22 @@ def _start_tunnel():
         _tunnel_status = status
 
 
+_STREAM_SERVER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stream_server.py")
+
+
+def _start_stream_server():
+    """Launch stream_server.py as a background subprocess on port 8000."""
+    try:
+        subprocess.Popen(
+            [sys.executable, _STREAM_SERVER_SCRIPT],
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform.startswith("win") else 0,
+        )
+        _log.info("stream_server.py launched on port 8000")
+    except Exception as exc:
+        _log.error("Failed to start stream_server.py: %s", exc)
+
+
+threading.Thread(target=_start_stream_server, daemon=True).start()
 threading.Thread(target=_start_tunnel, daemon=True).start()
 
 app = Flask(__name__)

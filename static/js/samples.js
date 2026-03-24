@@ -247,12 +247,11 @@ function resizeRemoteCanvas() {
   remoteCanvasElement.height = window.innerHeight;
 }
 
-function updateRemoteStatus(text, color = '#aaa', borderColor = '#555') {
+function updateRemoteStatus(text, state = 'default') {
   const badge = document.getElementById('remote-status-badge');
   if (!badge) return;
   badge.textContent = text;
-  badge.style.color = color;
-  badge.style.borderColor = borderColor;
+  badge.dataset.state = state;
 }
 
 function formatRemoteStatus(baseText, latencyMs = null) {
@@ -263,108 +262,90 @@ function formatRemoteStatus(baseText, latencyMs = null) {
 }
 
 function initializeRemoteSocketStream() {
-  if (!remoteCanvasElement || !remoteCanvasContext) {
-    updateRemoteStatus('Streaming unavailable', '#ff6b6b', '#ff6b6b');
+  if (!remoteCanvasElement || !remoteCanvasContext || typeof window.io !== 'function') {
+    updateRemoteStatus('Streaming unavailable', 'error');
     return;
   }
 
   resizeRemoteCanvas();
   window.addEventListener('resize', resizeRemoteCanvas);
 
+  const socket = window.io('/stream', {
+    transports: ['websocket'],
+    reconnectionDelay: 1000,
+    reconnectionAttempts: Infinity,
+    closeOnBeforeunload: true,
+  });
   const frameImage = new Image();
   let _prevFrameUrl = null;
   const remoteStatusState = {
     baseText: 'Remote Feed - Connecting...',
-    color: '#ff6b6b',
-    borderColor: '#ff6b6b',
+    state: 'default',
     latencyMs: null,
   };
+
+  window.remoteStreamSocket = socket;
 
   function renderRemoteStatus() {
     updateRemoteStatus(
       formatRemoteStatus(remoteStatusState.baseText, remoteStatusState.latencyMs),
-      remoteStatusState.color,
-      remoteStatusState.borderColor,
+      remoteStatusState.state,
     );
   }
 
-  function connect() {
-    // Use wss:// when the page is served over HTTPS (e.g. through the Cloudflare
-    // tunnel), ws:// for plain HTTP (local access).
-    // stream_server.py handles /ws directly on port 8000; use window.location.host
-    // so the URL works both locally (ws://localhost:8000/ws) and through the
-    // tunnel (wss://your-tunnel.trycloudflare.com/ws).
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${window.location.host}/ws`;
-    const socket = new WebSocket(wsUrl);
-    socket.binaryType = 'arraybuffer';
-    window.remoteStreamSocket = socket;
+  socket.on('connect', () => {
+    // Clear any stale frame from a previous session before live frames arrive.
+    remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+    if (_prevFrameUrl) { URL.revokeObjectURL(_prevFrameUrl); _prevFrameUrl = null; }
+    remoteStatusState.baseText = 'Remote Feed - Connected';
+    remoteStatusState.state = 'connected';
+    remoteStatusState.latencyMs = null;
+    renderRemoteStatus();
+  });
 
-    socket.onopen = () => {
-      remoteStatusState.baseText = 'Remote Feed - Connected';
-      remoteStatusState.color = '#7CFC00';
-      remoteStatusState.borderColor = '#7CFC00';
+  socket.on('disconnect', () => {
+    remoteStatusState.baseText = 'Remote Feed - Reconnecting...';
+    remoteStatusState.state = 'error';
+    remoteStatusState.latencyMs = null;
+    renderRemoteStatus();
+  });
+
+  socket.on('stream_status', (payload) => {
+    if (payload?.state === 'error') {
+      remoteStatusState.baseText = `Remote Feed - ${payload.message || 'Camera unavailable'}`;
+      remoteStatusState.state = 'error';
       remoteStatusState.latencyMs = null;
       renderRemoteStatus();
-    };
+    }
+  });
 
-    socket.onclose = () => {
-      // remoteStreamSocket is set to null by stopRemoteSocketStream before
-      // close() is called; a null value here means the stop was intentional.
-      if (window.remoteStreamSocket === null) return;
-      remoteStatusState.baseText = 'Remote Feed - Reconnecting...';
-      remoteStatusState.color = '#ff6b6b';
-      remoteStatusState.borderColor = '#ff6b6b';
-      remoteStatusState.latencyMs = null;
-      renderRemoteStatus();
-      setTimeout(connect, 1000);
-    };
-
-    socket.onerror = () => {
-      // onclose fires after onerror; reconnect is handled there.
-    };
-
-    socket.onmessage = (event) => {
-      const buffer = event.data;
-      if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 8) return;
-
-      // Binary protocol: first 8 bytes = big-endian int64 server timestamp (ms),
-      // remaining bytes = JPEG frame data.
-      const view = new DataView(buffer);
-      const tsMs = Number(view.getBigInt64(0));
-      const jpegBytes = buffer.slice(8);
-
+  socket.on('frame', (payload) => {
+    if (typeof payload?.server_ts_ms === 'number') {
       remoteStatusState.baseText = 'Remote Feed - Connected';
-      remoteStatusState.color = '#7CFC00';
-      remoteStatusState.borderColor = '#7CFC00';
-      remoteStatusState.latencyMs = Date.now() - tsMs;
+      remoteStatusState.state = 'connected';
+      remoteStatusState.latencyMs = Date.now() - payload.server_ts_ms;
       renderRemoteStatus();
+    }
 
-      frameImage.onload = () => {
-        remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
-        remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
-        if (_prevFrameUrl) {
-          URL.revokeObjectURL(_prevFrameUrl);
-          _prevFrameUrl = null;
-        }
-      };
-      const frameBlob = new Blob([jpegBytes], { type: 'image/jpeg' });
-      const frameUrl = URL.createObjectURL(frameBlob);
-      _prevFrameUrl = frameUrl;
-      frameImage.src = frameUrl;
+    frameImage.onload = () => {
+      remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+      remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+      if (_prevFrameUrl) {
+        URL.revokeObjectURL(_prevFrameUrl);
+        _prevFrameUrl = null;
+      }
     };
-  }
-
-  connect();
+    const frameBlob = new Blob([payload.data], { type: 'image/jpeg' });
+    const frameUrl = URL.createObjectURL(frameBlob);
+    _prevFrameUrl = frameUrl;
+    frameImage.src = frameUrl;
+  });
 }
 
 function stopRemoteSocketStream() {
-  // Null out the reference first so the onclose handler does not trigger a
-  // reconnect attempt.
-  const sock = window.remoteStreamSocket;
-  window.remoteStreamSocket = null;
-  if (sock) {
-    sock.close();
+  if (window.remoteStreamSocket && typeof window.remoteStreamSocket.disconnect === 'function') {
+    window.remoteStreamSocket.disconnect();
+    window.remoteStreamSocket = null;
   }
 }
 

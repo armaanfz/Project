@@ -1,0 +1,180 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "$description": "Magnifier design tokens — extracted from existing CSS + proposals for consistency",
+
+  "color": {
+    "background": {
+      "$value": "#111111",
+      "$description": "Page/app background (body, html)"
+    },
+    "surface": {
+      "$value": "#000000",
+      "$description": "Component surface — buttons, nav, menus"
+    },
+    "surface-raised": {
+      "$value": "rgba(17, 17, 17, 0.92)",
+      "$description": "Content panels with slight transparency"
+    },
+    "surface-overlay": {
+      "$value": "rgba(0, 0, 0, 0.9)",
+      "$description": "Full-screen overlays (filter menu, tutorial)"
+    },
+    "accent": {
+      "$value": "#ffd700",
+      "$description": "Primary accent — gold/yellow. User-customisable via --accent-color CSS prop."
+    },
+    "accent-glow-soft": {
+      "$value": "rgba(255, 215, 0, 0.6)",
+      "$description": "Soft glow for active states"
+    },
+    "accent-glow-strong": {
+      "$value": "rgba(255, 215, 0, 0.8)",
+      "$description": "Strong glow for hover states"
+    },
+    "text-primary": {
+      "$value": "#ffffff",
+      "$description": "Primary text on dark backgrounds"
+    },
+    "text-secondary": {
+      "$value": "rgba(255, 255, 255, 0.6)",
+      "$description": "Muted labels and captions"
+    },
+    "text-muted": {
+      "$value": "#cccccc",
+      "$description": "Subtle body text inside cards"
+    },
+    "danger-bg": {
+      "$value": "#2a0a0a",
+      "$description": "Danger button background"
+    },
+    "danger-border": {
+      "$value": "#ff6b6b",
+      "$description": "Danger button border and text"
+    },
+    "danger-hover-bg": {
+      "$value": "#4a1515",
+      "$description": "Danger button hover background"
+    },
+    "track": {
+      "$value": "#444444",
+      "$description": "Slider track fill"
+    },
+    "track-border": {
+      "$value": "#222222",
+      "$description": "Slider track border"
+    },
+    "border-subtle": {
+      "$value": "#666666",
+      "$description": "Subtle border for slider columns"
+    },
+
+    "_NEEDS_FIXING": {
+      "$description": "These colors are used in the codebase but fall outside the design system and should be replaced",
+      "remote-status-green": {
+        "$value": "#7CFC00",
+        "$used-in": "samples.css:572 — #remote-status-badge",
+        "$proposal": "Replace with accent color so it respects user's chosen theme"
+      },
+      "slider-blue": {
+        "$value": "#0078ff",
+        "$used-in": "samples.css:203,214,226 — .custom-slider-col input[type=range]",
+        "$proposal": "Replace with var(--accent-color) so sliders share the accent system"
+      },
+      "zoom-thumb-hardcoded": {
+        "$value": "#ffd900",
+        "$used-in": "samples.css:333 — #zoom-slider webkit thumb",
+        "$note": "Off by 2 from accent #ffd700 — likely a typo. Already uses var(--accent-color) in the Firefox rule."
+      }
+    },
+
+    "filter-btn": {
+      "$description": "Filter button backgrounds — intentionally semantic, each represents the visual effect. These are fine as hard-coded values.",
+      "normal":             { "$value": "#3498db" },
+      "protanopia":         { "$value": "#e74c3c" },
+      "deuteranopia":       { "$value": "#2ecc71" },
+      "tritanopia":         { "$value": "#f1c40f" },
+      "grayscale":          { "$value": "#7f8c8d" },
+      "inverted":           { "$value": "#34495e" },
+      "inverted-grayscale": { "$value": "#2c3e50" },
+      "blue-on-yellow":     { "$value": "#0033cc" },
+      "orange-on-black":    { "$value": "#ff6600" },
+      "green-on-black":     { "$value": "#00ff00" },
+      "yellow-on-black":    { "$value": "#ffdd00" },
+      "purple-on-black":    { "$value": "#800080" }
+    }
+  },
+
+  "typography": {
+    "font-family": {
+      "$value": "Arial, sans-serif",
+      "$description": "Single font stack — no custom typeface loaded. High legibility for low-vision users."
+    },
+    "font-size": {
+      "$description": "Proposed scale based on observed values, rationalised to a 4-step set",
+      "xs":  { "$value": "12px", "$usage": "tunnel-label captions" },
+      "sm":  { "$value": "14px", "$usage": "status badges, secondary text" },
+      "md":  { "$value": "18px", "$usage": "nav links, body text" },
+      "lg":  { "$value": "24px", "$usage": "control buttons (.btn), slider labels" },
+      "xl":  { "$value": "28px", "$usage": "start buttons, filter buttons" },
+      "2xl": { "$value": "34px", "$usage": "zoom buttons" },
+      "3xl": { "$value": "36px", "$usage": "page h1" }
+    },
+    "font-weight": {
+      "normal": { "$value": "400" },
+      "bold":   { "$value": "700" },
+      "black":  { "$value": "800", "$usage": "start-btn" }
+    },
+    "line-height": {
+      "body":  { "$value": "1.65" },
+      "tight": { "$value": "1.1",  "$usage": "filter buttons, multi-line labels" }
+    }
+  },
+
+  "spacing": {
+    "$description": "8px grid — all spacing should be multiples of 4px",
+    "1": { "$value": "4px" },
+    "2": { "$value": "8px" },
+    "3": { "$value": "12px" },
+    "4": { "$value": "16px" },
+    "5": { "$value": "20px" },
+    "6": { "$value": "24px" },
+    "8": { "$value": "32px" },
+    "10": { "$value": "40px" },
+    "_anomaly": {
+      "$description": "Currently uses 9px, 26px, 150px gap — none of these map to the 4px grid",
+      "zoom-container-gap": { "$value": "150px", "$note": "Magic number — this positions the +/- buttons around the rotated slider. OK to keep as a layout detail." }
+    }
+  },
+
+  "border-radius": {
+    "$description": "Proposed rationalised scale (current: 8, 10, 12, 14, 15, 20, 36px — no pattern)",
+    "sm":   { "$value": "8px",  "$usage": "buttons, small cards, badges" },
+    "md":   { "$value": "12px", "$usage": "panels, camera-error card" },
+    "lg":   { "$value": "20px", "$usage": "tutorial box" },
+    "pill": { "$value": "36px", "$usage": "filter buttons, slider columns" },
+    "full": { "$value": "50%",  "$usage": "zoom buttons, slider thumbs" }
+  },
+
+  "shadow": {
+    "card":        { "$value": "0 4px 14px rgba(0, 0, 0, 0.4)" },
+    "glow-soft":   { "$value": "0 0 10px rgba(var(--accent-color-rgb), 0.8)" },
+    "glow-medium": { "$value": "0 0 18px rgba(var(--accent-color-rgb), 0.8)" },
+    "glow-strong": { "$value": "0 0 30px rgba(var(--accent-color-rgb), 0.8)" },
+    "control":     { "$value": "0 4px 10px rgba(0, 0, 0, 0.5)" }
+  },
+
+  "transition": {
+    "fast":    { "$value": "0.18s ease" },
+    "default": { "$value": "0.3s ease" }
+  },
+
+  "z-index": {
+    "back-btn":       { "$value": "200" },
+    "status-badge":   { "$value": "300" },
+    "mask-controls":  { "$value": "600" },
+    "menu":           { "$value": "999" },
+    "camera-error":   { "$value": "999" },
+    "tutorial-overlay": { "$value": "5000" },
+    "tutorial-highlight": { "$value": "5500" }
+  }
+}

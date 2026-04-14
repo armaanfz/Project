@@ -29,11 +29,14 @@ def test_home_returns_200(client):
     assert r.status_code == 200
     assert b"replace-this-with-a-strong-secret" not in r.data
     assert b"Access Remote Stream" in r.data
+    assert b"Tutorial" in r.data
 
 
 def test_samples_returns_200(client):
     r = client.get("/samples")
     assert r.status_code == 200
+    assert b'id="tutorial-btn"' not in r.data
+    assert b"Start tutorial" not in r.data
 
 
 def test_remote_returns_200_and_includes_remote_controls(client):
@@ -43,7 +46,8 @@ def test_remote_returns_200_and_includes_remote_controls(client):
     assert b"Access Remote Stream" not in response.data
     assert b"Remote Feed - Connecting..." in response.data
     assert b"stream-canvas" in response.data
-    assert b"Tutorial" in response.data
+    assert b'id="tutorial-btn"' not in response.data
+    assert b"Start tutorial" not in response.data
     assert b"Reset Zoom" in response.data
     assert b"Mask" in response.data
 

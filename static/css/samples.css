@@ -533,6 +533,7 @@ outline-offset: 2px;
 }
 
 /* Mask button active state */
+#filter-button.active,
 #mask-btn.active {
 background-color: var(--accent-color);
 color: #000;
@@ -581,10 +582,6 @@ color: #ccc;
 margin: 0;
 }
 
-/* Hide the optional shape button by default (not used for letterbox) */
-#mask-shape-btn {
-display: none !important;
-}
 
 /* ================== Remote view ================== */
 
@@ -687,6 +684,10 @@ justify-content: space-between;
 margin-top: 18px;
 }
 
+.tutorial-hidden {
+display: none;
+}
+
 /* Highlight ring */
 .tutorial-highlight {
 position: fixed;
@@ -714,6 +715,7 @@ z-index: 5500;
         border: 3px solid Highlight;
         forced-color-adjust: none;
     }
+    #filter-button.active,
     #mask-btn.active {
         border: 3px solid Highlight;
         background: Highlight;

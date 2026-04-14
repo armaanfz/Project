@@ -82,6 +82,13 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const tutorialButton = document.getElementById('start-tutorial-btn');
+    if (tutorialButton) {
+        tutorialButton.addEventListener('click', () => {
+            window.location.href = tutorialButton.dataset.tutorialUrl;
+        });
+    }
+
     const remoteButton = document.getElementById('start-remote-btn');
     if (remoteButton) {
         remoteButton.addEventListener('click', () => {

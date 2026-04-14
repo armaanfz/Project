@@ -30,6 +30,8 @@ def test_home_returns_200(client):
     assert b"replace-this-with-a-strong-secret" not in r.data
     assert b"Access Remote Stream" in r.data
     assert b"Tutorial" in r.data
+    assert b"Show QR Code" in r.data
+    assert b"Copy URL" not in r.data
 
 
 def test_samples_returns_200(client):
@@ -55,6 +57,26 @@ def test_remote_returns_200_and_includes_remote_controls(client):
 def test_home_tab_content_returns_200(client):
     r = client.get("/home-tab-content")
     assert r.status_code == 200
+
+
+def test_tunnel_qr_returns_png_when_tunnel_ready(client, monkeypatch):
+    monkeypatch.setattr(app_module, "_tunnel_status", "ready")
+    monkeypatch.setattr(app_module, "_tunnel_url", "https://example.trycloudflare.com")
+
+    response = client.get("/tunnel-qr")
+
+    assert response.status_code == 200
+    assert response.content_type == "image/png"
+    assert response.data.startswith(b"\x89PNG")
+
+
+def test_tunnel_qr_returns_503_when_tunnel_unavailable(client, monkeypatch):
+    monkeypatch.setattr(app_module, "_tunnel_status", "starting")
+    monkeypatch.setattr(app_module, "_tunnel_url", None)
+
+    response = client.get("/tunnel-qr")
+
+    assert response.status_code == 503
 
 
 def test_shutdown_rejects_non_local_requests(client):

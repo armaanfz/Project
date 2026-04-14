@@ -6,9 +6,11 @@ import subprocess
 import sys
 import time
 import urllib.request
+from io import BytesIO
 import cv2
 import threading
-from flask import Flask, render_template, request
+import qrcode
+from flask import Flask, render_template, request, send_file
 from flask_socketio import SocketIO
 
 
@@ -434,6 +436,26 @@ def shutdown():
 def tunnel_status():
     with _tunnel_lock:
         return {"status": _tunnel_status, "url": _tunnel_url}
+
+
+@app.route("/tunnel-qr")
+def tunnel_qr():
+    with _tunnel_lock:
+        tunnel_url = _tunnel_url
+        tunnel_status = _tunnel_status
+
+    if tunnel_status != "ready" or not tunnel_url:
+        return {"error": "Tunnel unavailable"}, 503
+
+    qr = qrcode.QRCode(border=2, box_size=8)
+    qr.add_data(tunnel_url)
+    qr.make(fit=True)
+    image = qr.make_image(fill_color="black", back_color="white")
+
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return send_file(buffer, mimetype="image/png")
 
 
 @app.route("/home-tab-content")

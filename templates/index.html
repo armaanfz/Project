@@ -53,7 +53,10 @@
         <div id="tunnel-box" aria-live="polite">
             <p class="tunnel-label">Remote Access URL</p>
             <p id="tunnel-url-text">Starting tunnel...</p>
-            <button type="button" id="tunnel-copy-btn" style="display:none" aria-label="Copy remote access URL">Copy URL</button>
+            <button type="button" id="tunnel-qr-btn" style="display:none" aria-label="Show QR code for remote access URL">Show QR Code</button>
+            <div id="tunnel-qr-box" hidden>
+                <img id="tunnel-qr-image" alt="QR code for the remote access URL">
+            </div>
         </div>
         <button type="button" class="shutdown-btn" id="shutdown-btn" aria-label="Shut down Raspberry Pi">Shut Down</button>
     </aside>
@@ -96,7 +99,16 @@
 
 (function() {
   var tunnelUrlText = document.getElementById('tunnel-url-text');
-  var tunnelCopyBtn = document.getElementById('tunnel-copy-btn');
+  var tunnelQrBtn = document.getElementById('tunnel-qr-btn');
+  var tunnelQrBox = document.getElementById('tunnel-qr-box');
+  var tunnelQrImage = document.getElementById('tunnel-qr-image');
+  var qrLoadedForUrl = null;
+
+  function hideQr() {
+    tunnelQrBox.hidden = true;
+    tunnelQrImage.removeAttribute('src');
+    qrLoadedForUrl = null;
+  }
 
   function pollTunnel() {
     fetch('/tunnel-status')
@@ -109,9 +121,11 @@
           a.target = '_blank';
           a.rel = 'noopener noreferrer';
           tunnelUrlText.replaceChildren(a);
-          tunnelCopyBtn.style.display = 'block';
+          tunnelQrBtn.style.display = 'block';
         } else if (data.status === 'error') {
           tunnelUrlText.textContent = 'Tunnel unavailable';
+          tunnelQrBtn.style.display = 'none';
+          hideQr();
         } else {
           setTimeout(pollTunnel, 2000);
         }
@@ -121,13 +135,14 @@
       });
   }
 
-  tunnelCopyBtn.addEventListener('click', function() {
+  tunnelQrBtn.addEventListener('click', function() {
     var anchor = tunnelUrlText.querySelector('a');
     if (anchor) {
-      navigator.clipboard.writeText(anchor.href).then(function() {
-        tunnelCopyBtn.textContent = 'Copied!';
-        setTimeout(function() { tunnelCopyBtn.textContent = 'Copy URL'; }, 1500);
-      });
+      if (qrLoadedForUrl !== anchor.href) {
+        tunnelQrImage.src = '/tunnel-qr?ts=' + Date.now();
+        qrLoadedForUrl = anchor.href;
+      }
+      tunnelQrBox.hidden = false;
     }
   });
 

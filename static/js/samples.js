@@ -691,6 +691,8 @@ function applyNormal() {
 
     // Reset slider UI and values to defaults
     resetFilterSliders();
+    _setActiveFilterBtn('normal');
+    _saveSettings();
 }
 
 function applyProtanopia() {
@@ -940,6 +942,12 @@ const _barsMaskState = {
   inverted: false,
 
   resizeObserver: null
+};
+
+const _DEFAULT_MASK_STATE = {
+  barPct: 5,
+  orientation: 'horizontal',
+  inverted: false,
 };
 
 function _ensureMaskUIExists() {
@@ -1223,6 +1231,25 @@ function disableBarsMask() {
   _saveSettings();
 }
 
+function resetMaskSettings() {
+  _barsMaskState.barPct = _DEFAULT_MASK_STATE.barPct;
+  _barsMaskState.orientation = _DEFAULT_MASK_STATE.orientation;
+  _barsMaskState.inverted = _DEFAULT_MASK_STATE.inverted;
+
+  const radiusEl = document.getElementById('mask-radius');
+  if (radiusEl) radiusEl.value = String(_barsMaskState.barPct);
+
+  updateMaskOrientationButton();
+  updateMaskInvertButton();
+  disableBarsMask();
+}
+
+function resetTutorialViewerState() {
+  applyNormal();
+  hideFilterMenu();
+  resetMaskSettings();
+}
+
 function updateMaskInvertButton() {
   const btn = document.getElementById('mask-invert-btn');
   if (!btn) return;
@@ -1350,19 +1377,19 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRow.className = "tutorial-buttons";
 
     backBtn = document.createElement("button");
-    backBtn.className = "btn";
+    backBtn.className = "btn tutorial-back-btn";
     backBtn.textContent = "Back";
 
     nextBtn = document.createElement("button");
-    nextBtn.className = "btn";
+    nextBtn.className = "btn tutorial-next-btn";
     nextBtn.textContent = "Next";
 
     skipBtn = document.createElement("button");
-    skipBtn.className = "btn";
-    skipBtn.textContent = "Skip";
+    skipBtn.className = "btn tutorial-exit-btn";
+    skipBtn.textContent = "Exit";
 
     finishBtn = document.createElement("button");
-    finishBtn.className = "btn";
+    finishBtn.className = "btn tutorial-finish-btn";
     finishBtn.textContent = "Finish";
 
     btnRow.append(backBtn, nextBtn, skipBtn, finishBtn);
@@ -1472,6 +1499,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function endTutorial() {
+    resetTutorialViewerState();
     overlay?.remove();
     highlight?.remove();
     overlay = box = textEl = highlight = null;

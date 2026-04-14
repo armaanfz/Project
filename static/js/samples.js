@@ -737,8 +737,12 @@ function applyPurpleOnBlack() {
     applyFilter('invert(100%) brightness(70%) contrast(200%) sepia(100%) hue-rotate(300deg)');
 }
 
-// Toggle the filter menu
-function toggleMenu() {
+function isFilterMenuOpen() {
+    return !!menu?.classList.contains('active');
+}
+
+function setFilterMenuPosition() {
+    if (!menu) return;
     if (document.fullscreenElement) {
         menu.style.position = 'absolute';
         menu.style.top = '10px';
@@ -748,7 +752,71 @@ function toggleMenu() {
         menu.style.top = '0';
         menu.style.right = '0';
     }
-    menu.classList.toggle('active');
+}
+
+function showFilterMenu() {
+    if (!menu) return;
+    hideMaskControls();
+    setFilterMenuPosition();
+    menu.classList.add('active');
+    const filterButton = document.getElementById('filter-button');
+    if (filterButton) filterButton.classList.add('active');
+}
+
+function hideFilterMenu() {
+    if (!menu) return;
+    menu.classList.remove('active');
+    const filterButton = document.getElementById('filter-button');
+    if (filterButton) filterButton.classList.remove('active');
+}
+
+function toggleFilterMenu() {
+    if (isFilterMenuOpen()) {
+        hideFilterMenu();
+    } else {
+        showFilterMenu();
+    }
+}
+
+function isMaskControlsOpen() {
+    const controls = document.getElementById('mask-controls');
+    return !!controls && controls.style.display !== 'none';
+}
+
+function showMaskControls() {
+    hideFilterMenu();
+    if (!_barsMaskState.enabled) {
+        enableBarsMask();
+    }
+
+    const controls = document.getElementById('mask-controls');
+    if (controls) controls.style.display = 'flex';
+    const btn = document.getElementById('mask-btn');
+    if (btn) btn.classList.add('active'), btn.setAttribute('aria-pressed', 'true');
+}
+
+function hideMaskControls() {
+    const controls = document.getElementById('mask-controls');
+    if (controls) controls.style.display = 'none';
+    const btn = document.getElementById('mask-btn');
+    if (btn) btn.classList.remove('active'), btn.setAttribute('aria-pressed', 'false');
+}
+
+function toggleMaskControls() {
+    if (isMaskControlsOpen()) {
+        hideMaskControls();
+    } else {
+        showMaskControls();
+    }
+}
+
+function closeAllPanels() {
+    hideFilterMenu();
+    hideMaskControls();
+}
+
+function isTutorialOpen() {
+    return !!document.querySelector('.tutorial-overlay');
 }
 
 /* ---------- Reset Zoom Button Logic ---------- */
@@ -781,7 +849,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Button listeners (no inline handlers)
     document.getElementById('back-btn')?.addEventListener('click', goHome);
-    document.getElementById('filter-button')?.addEventListener('click', toggleMenu);
+    document.getElementById('filter-button')?.addEventListener('click', toggleFilterMenu);
     document.getElementById('center-btn')?.addEventListener('click', centerView);
     resetBtn.addEventListener('click', () => window.resetZoom());
 
@@ -954,7 +1022,7 @@ function _ensureMaskUIExists() {
   // Hook button events if not hooked
   maskBtn = document.getElementById('mask-btn');
   if (maskBtn && !_barsMaskHookedButtons.has(maskBtn)) {
-    maskBtn.addEventListener('click', () => toggleBarsMask());
+    maskBtn.addEventListener('click', () => toggleMaskControls());
     _barsMaskHookedButtons.add(maskBtn);
   }
 }
@@ -1133,10 +1201,6 @@ function enableBarsMask() {
   _ensureMaskUIExists();
   createBarsMaskCanvas();
   _barsMaskState.enabled = true;
-  const controls = document.getElementById('mask-controls');
-  if (controls) controls.style.display = 'flex';
-  const btn = document.getElementById('mask-btn');
-  if (btn) btn.classList.add('active'), btn.setAttribute('aria-pressed','true');
   drawBarsMask();
   updateMaskOrientationButton();
   updateMaskInvertButton();
@@ -1155,15 +1219,8 @@ function disableBarsMask() {
   _barsMaskState.canvas = null;
   _barsMaskState.ctx = null;
   _barsMaskState.enabled = false;
-  const controls = document.getElementById('mask-controls');
-  if (controls) controls.style.display = 'none';
-  const btn = document.getElementById('mask-btn');
-  if (btn) btn.classList.remove('active'), btn.setAttribute('aria-pressed','false');
+  hideMaskControls();
   _saveSettings();
-}
-
-function toggleBarsMask() {
-  if (_barsMaskState.enabled) disableBarsMask(); else enableBarsMask();
 }
 
 function updateMaskInvertButton() {
@@ -1219,6 +1276,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let overlay, box, textEl, highlight;
   let stepIndex = 0;
+  let backBtn, nextBtn, skipBtn, finishBtn;
+  const tutorialParams = new URLSearchParams(window.location.search);
+  const shouldAutoStartTutorial =
+    window.location.pathname === '/samples' && tutorialParams.get('tutorial') === '1';
 
   const steps = [
     {
@@ -1236,7 +1297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     {
       text: "This is the Filters menu. It changes how colors look.",
       target: "#menu",
-      before: () => document.getElementById("menu")?.classList.add("active")
+      before: () => showFilterMenu()
     },
     {
       // Fix 2: target changed from ".custom-slider-col" to null so renderStep does not
@@ -1244,7 +1305,7 @@ document.addEventListener('DOMContentLoaded', () => {
       text: "These sliders adjust brightness and contrast.",
       target: null,
       before: () => {
-        document.getElementById("menu")?.classList.add("active");
+        showFilterMenu();
         requestAnimationFrame(() => {
           highlightMultiple([".custom-slider-col"]);
         });
@@ -1254,10 +1315,8 @@ document.addEventListener('DOMContentLoaded', () => {
       text: "This is the Mask button. It hides parts of the screen.",
       target: "#mask-btn",
       before: () => {
-        if (typeof enableBarsMask === "function") {
-          enableBarsMask();
-        } else if (typeof toggleBarsMask === "function") {
-          toggleBarsMask();
+        if (typeof showMaskControls === "function") {
+          showMaskControls();
         }
       } 
     },
@@ -1265,10 +1324,8 @@ document.addEventListener('DOMContentLoaded', () => {
       text: "This slider controls how much is hidden.",
       target: "#mask-controls",
       before: () => {
-        if (typeof enableBarsMask === "function") {
-          enableBarsMask();
-        } else if (typeof toggleBarsMask === "function") {
-          toggleBarsMask();
+        if (typeof showMaskControls === "function") {
+          showMaskControls();
         }
       }
     },
@@ -1292,19 +1349,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnRow = document.createElement("div");
     btnRow.className = "tutorial-buttons";
 
-    const backBtn = document.createElement("button");
+    backBtn = document.createElement("button");
     backBtn.className = "btn";
     backBtn.textContent = "Back";
 
-    const nextBtn = document.createElement("button");
+    nextBtn = document.createElement("button");
     nextBtn.className = "btn";
     nextBtn.textContent = "Next";
 
-    const skipBtn = document.createElement("button");
+    skipBtn = document.createElement("button");
     skipBtn.className = "btn";
     skipBtn.textContent = "Skip";
 
-    btnRow.append(backBtn, nextBtn, skipBtn);
+    finishBtn = document.createElement("button");
+    finishBtn.className = "btn";
+    finishBtn.textContent = "Finish";
+
+    btnRow.append(backBtn, nextBtn, skipBtn, finishBtn);
     box.append(textEl, btnRow);
     overlay.append(box);
     document.body.append(overlay);
@@ -1330,8 +1391,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     skipBtn.addEventListener('click', endTutorial);
+    finishBtn.addEventListener('click', endTutorial);
 
     renderStep();
+  }
+
+  function updateTutorialButtons() {
+    if (!backBtn || !nextBtn || !skipBtn || !finishBtn) return;
+
+    const isFirstStep = stepIndex === 0;
+    const isLastStep = stepIndex === steps.length - 1;
+
+    backBtn.classList.toggle('tutorial-hidden', isFirstStep);
+    nextBtn.classList.toggle('tutorial-hidden', isLastStep);
+    skipBtn.classList.toggle('tutorial-hidden', isLastStep);
+    finishBtn.classList.toggle('tutorial-hidden', !isLastStep);
   }
 
   function highlightMultiple(selectors) {
@@ -1370,6 +1444,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const step = steps[stepIndex];
     if (!step) return;
     textEl.textContent = step.text;
+    updateTutorialButtons();
 
     if (typeof step.before === "function") {
       step.before();
@@ -1400,12 +1475,17 @@ document.addEventListener('DOMContentLoaded', () => {
     overlay?.remove();
     highlight?.remove();
     overlay = box = textEl = highlight = null;
+    backBtn = nextBtn = skipBtn = finishBtn = null;
     stepIndex = 0;
   }
 
-  document.getElementById("tutorial-btn")?.addEventListener("click", () => {
-    if (!overlay) createTutorial();
-  });
+  if (shouldAutoStartTutorial) {
+    createTutorial();
+    tutorialParams.delete('tutorial');
+    const nextQuery = tutorialParams.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }
 });
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
@@ -1431,18 +1511,43 @@ document.addEventListener('keydown', (e) => {
     case 'f':
     case 'F':
       e.preventDefault();
-      if (typeof toggleMenu === 'function') toggleMenu();
+      if (typeof toggleFilterMenu === 'function') toggleFilterMenu();
       break;
     case 'm':
     case 'M':
       e.preventDefault();
-      if (typeof toggleBarsMask === 'function') toggleBarsMask();
+      if (typeof toggleMaskControls === 'function') toggleMaskControls();
       break;
     case 'Escape':
-      if (menu && menu.classList.contains('active')) {
+      if (isFilterMenuOpen() || isMaskControlsOpen()) {
         e.preventDefault();
-        menu.classList.remove('active');
+        closeAllPanels();
       }
       break;
+  }
+});
+
+document.addEventListener('pointerdown', (e) => {
+  if (isTutorialOpen()) return;
+
+  const target = e.target;
+  const filterButton = document.getElementById('filter-button');
+  const maskButton = document.getElementById('mask-btn');
+  const maskControls = document.getElementById('mask-controls');
+
+  if (isFilterMenuOpen()) {
+    const insideFilterMenu = !!menu?.contains(target);
+    const onFilterButton = !!filterButton?.contains(target);
+    if (!insideFilterMenu && !onFilterButton) {
+      hideFilterMenu();
+    }
+  }
+
+  if (isMaskControlsOpen()) {
+    const insideMaskControls = !!maskControls?.contains(target);
+    const onMaskButton = !!maskButton?.contains(target);
+    if (!insideMaskControls && !onMaskButton) {
+      hideMaskControls();
+    }
   }
 });

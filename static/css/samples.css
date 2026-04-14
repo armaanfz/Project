@@ -679,13 +679,31 @@ box-shadow: 0 0 30px rgba(var(--accent-color-rgb), 0.8);
 
 /* Buttons row */
 .tutorial-buttons {
-display: flex;
-justify-content: space-between;
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+align-items: center;
 margin-top: 18px;
+gap: 12px;
 }
 
 .tutorial-hidden {
 display: none;
+}
+
+.tutorial-back-btn {
+grid-column: 1;
+justify-self: start;
+}
+
+.tutorial-next-btn,
+.tutorial-finish-btn {
+grid-column: 2;
+justify-self: center;
+}
+
+.tutorial-exit-btn {
+grid-column: 3;
+justify-self: end;
 }
 
 /* Highlight ring */

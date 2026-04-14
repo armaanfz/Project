@@ -351,7 +351,7 @@ nav ul li a:focus-visible,
     text-decoration: underline;
 }
 
-#tunnel-copy-btn {
+#tunnel-qr-btn {
     display: none;
     width: 100%;
     margin-top: 8px;
@@ -365,9 +365,33 @@ nav ul li a:focus-visible,
     font-weight: 700;
 }
 
-#tunnel-copy-btn:hover {
+#tunnel-qr-btn:hover {
     background-color: #000;
     color: var(--accent-color);
+}
+
+#tunnel-qr-box {
+    margin-top: 12px;
+    padding: 12px;
+    display: flex;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(var(--accent-color-rgb), 0.4);
+    border-radius: 10px;
+}
+
+#tunnel-qr-box[hidden] {
+    display: none;
+}
+
+#tunnel-qr-image {
+    display: block;
+    width: min(220px, 100%);
+    height: auto;
+    padding: 10px;
+    background: #ffffff;
+    border-radius: 10px;
+    box-sizing: border-box;
 }
 
 /* ── Forced-colors / high-contrast mode ─────────────────────────────────────── */

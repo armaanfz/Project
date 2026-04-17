@@ -114,6 +114,20 @@ function _setActiveFilterBtn(key) {
 }
 // ── End settings persistence ──────────────────────────────────────────────────
 
+function wireTouchFriendlyRangeInput(input) {
+  if (!input || input.dataset.touchGuardWired === 'true') return;
+
+  const stopPropagation = (event) => {
+    event.stopPropagation();
+  };
+
+  ['touchstart', 'touchmove', 'touchend', 'touchcancel', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel'].forEach((type) => {
+    input.addEventListener(type, stopPropagation, { passive: true });
+  });
+
+  input.dataset.touchGuardWired = 'true';
+}
+
 const orientationBtn = document.getElementById('mask-orientation-btn');
 if (orientationBtn) {
   orientationBtn.addEventListener('click', () => {
@@ -402,6 +416,7 @@ videoContainer.addEventListener('mouseleave', () => {
 });
 
 videoContainer.addEventListener('touchstart', (e) => {
+    if (e.target?.closest?.('input[type="range"]')) return;
     if (e.touches.length === 2) {
         _pinching       = true;
         isDragging      = false;
@@ -419,6 +434,7 @@ videoContainer.addEventListener('touchstart', (e) => {
 });
 
 videoContainer.addEventListener('touchmove', (e) => {
+    if (e.target?.closest?.('input[type="range"]')) return;
     e.preventDefault();
     if (_pinching && e.touches.length === 2) {
         const dist = Math.hypot(
@@ -451,6 +467,7 @@ videoContainer.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 videoContainer.addEventListener('touchend', (e) => {
+    if (e.target?.closest?.('input[type="range"]')) return;
     if (e.touches.length < 2)  _pinching  = false;
     if (e.touches.length === 0) isDragging = false;
 });
@@ -1017,12 +1034,14 @@ function _ensureMaskUIExists() {
       input.min = '0';
       input.max = '48';
       input.value = String(_barsMaskState.barPct ?? 5);
-      input.style.width = '280px';
+      input.style.width = '380px';
+      input.style.maxWidth = '60vw';
       input.addEventListener('input', (e) => {
         _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
         drawBarsMask();
         _saveSettings();
       });
+      wireTouchFriendlyRangeInput(input);
       maskControls.appendChild(input);
     }
   }
@@ -1289,6 +1308,7 @@ if (invertBtn) {
 // here at module scope (script is deferred, so the DOM is ready).
 const _maskRadiusEl = document.getElementById('mask-radius');
 if (_maskRadiusEl) {
+  wireTouchFriendlyRangeInput(_maskRadiusEl);
   _maskRadiusEl.addEventListener('input', (e) => {
     _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
     drawBarsMask();
@@ -1300,6 +1320,7 @@ if (_maskRadiusEl) {
 document.addEventListener('DOMContentLoaded', () => {
   setupBarsMaskFeature();
   _restoreSettings();
+  wireTouchFriendlyRangeInput(document.getElementById('zoom-slider'));
 
   let overlay, box, textEl, highlight;
   let stepIndex = 0;

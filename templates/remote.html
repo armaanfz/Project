@@ -7,7 +7,7 @@
     <meta name="description" content="Remote view of the Magnifier camera stream.">
     <title>Magnifier – Remote View</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
-    <!-- G: restore saved accent colour before CSS loads to avoid flash of default colour -->
+    <!-- restore saved accent colour before CSS loads to avoid flash of default colour -->
     <script>
     (function(){
         try {
@@ -27,8 +27,10 @@
 </head>
 
 <body>
+    <!-- Color-blindness SVG filters -->
     <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
         <defs>
+            <!-- Protanopia -->
             <filter id="filter-protanopia">
                 <feColorMatrix type="matrix" values="
                     0.152  1.053 -0.205  0  0
@@ -36,6 +38,7 @@
                    -0.004 -0.048  1.052  0  0
                     0      0      0      1  0"/>
             </filter>
+            <!-- Deuteranopia -->
             <filter id="filter-deuteranopia">
                 <feColorMatrix type="matrix" values="
                     0.367  0.861 -0.228  0  0
@@ -43,6 +46,7 @@
                    -0.012  0.043  0.969  0  0
                     0      0      0      1  0"/>
             </filter>
+            <!-- Tritanopia -->
             <filter id="filter-tritanopia">
                 <feColorMatrix type="matrix" values="
                     1.256 -0.077 -0.179  0  0
@@ -53,74 +57,90 @@
         </defs>
     </svg>
 
-    <button class="btn" id="back-btn" aria-label="Back to Magnifier home">⟵ Back</button>
-    <span id="remote-status-badge">Remote Feed - Connecting...</span>
+    <!-- Back button -->
+    <button id="back-btn" aria-label="Back to Magnifier home">← Back</button>
 
+    <!-- Remote status badge -->
+    <span id="remote-status-badge" aria-live="polite" aria-atomic="true">Remote Feed - Connecting...</span>
+
+    <!-- Remote stream canvas -->
     <div id="video-container">
         <canvas id="stream-canvas" role="img" aria-label="Live magnified remote camera feed for reading"></canvas>
+    </div>
 
-        <section id="controls" aria-label="Camera controls">
-            <button class="btn" id="filter-button" aria-label="Open filters menu">Filters</button>
-            <button class="btn" id="reset-btn" aria-label="Reset zoom to default" style="display: none;">Reset Zoom</button>
-            <button class="btn" id="center-btn" aria-label="Center the view" style="display: none;">Center</button>
-            <button class="btn" id="mask-btn" aria-pressed="false" aria-label="Toggle reading mask">Mask</button>
-            <div id="mask-controls" style="display:none;">
-                <label for="mask-radius" id="mask-radius-label" style="color:#fff; margin-right:8px;">Bar size</label>
-                <input type="range" id="mask-radius" min="0" max="48" value="5" aria-label="Mask bar size percentage" />
-                <button class="btn" id="mask-orientation-btn" aria-label="Switch mask orientation">Horizontal</button>
-                <button class="btn" id="mask-invert-btn" aria-label="Invert mask (focus center or edges)">Invert</button>
-            </div>
-        </section>
+    <!-- Control bar (fixed bottom-center) -->
+    <section id="controls" aria-label="Camera controls">
+        <button class="ctrl-btn" id="filter-button" aria-label="Open filters menu" aria-expanded="false">Filters</button>
+        <div class="ctrl-divider" aria-hidden="true"></div>
+        <button class="ctrl-btn" id="mask-btn" aria-pressed="false" aria-label="Toggle reading mask">Mask</button>
+        <div class="ctrl-divider" aria-hidden="true"></div>
+        <button class="ctrl-btn" id="center-btn" aria-label="Center the view" style="display:none;">Center</button>
+        <button class="ctrl-btn" id="reset-btn" aria-label="Reset zoom to default" style="display:none;">Reset Zoom</button>
+    </section>
 
-        <div class="zoom-container">
-            <button class="btn zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
-            <input type="range" id="zoom-slider" min="1" max="5" step="0.1" value="1" aria-label="Zoom level" aria-valuemin="1" aria-valuemax="5">
-            <button class="btn zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
+    <!-- Mask controls sheet (shown above control bar when mask is active) -->
+    <div id="mask-controls" style="display:none;" aria-label="Reading mask controls">
+        <p class="menu-section-title">Reading Mask</p>
+        <div class="mask-slider-row">
+            <input type="range" id="mask-radius" min="0" max="48" value="5" aria-label="Mask bar size percentage" />
+        </div>
+        <div class="mask-btn-row">
+            <button class="mask-option-btn" id="mask-orientation-btn" aria-label="Horizontal mask orientation">Horizontal</button>
+            <button class="mask-option-btn" id="mask-vertical-btn" aria-label="Vertical mask orientation">Vertical</button>
+            <button class="mask-option-btn" id="mask-invert-btn" aria-label="Invert mask">Invert</button>
         </div>
     </div>
 
-    <div id="menu">
-        <div id="filter-list">
-            <h3>Predefined Filters</h3>
-            <div class="scrollable">
-                <button class="filter-btn" data-filter="normal" aria-label="Normal colors">Normal</button>
-                <button class="filter-btn" data-filter="protanopia" aria-label="Protanopia color simulation">PT</button>
-                <button class="filter-btn" data-filter="deuteranopia" aria-label="Deuteranopia color simulation">DT</button>
-                <button class="filter-btn" data-filter="tritanopia" aria-label="Tritanopia color simulation">TT</button>
-                <button class="filter-btn" data-filter="grayscale" aria-label="Grayscale">Grayscale</button>
-                <button class="filter-btn" data-filter="inverted" aria-label="Inverted colors">Inverted</button>
-                <button class="filter-btn" data-filter="inverted-grayscale" aria-label="Inverted Grayscale">Inverted Grayscale</button>
-                <button class="filter-btn" data-filter="blue-on-yellow" aria-label="Blue on yellow">Blue on Yellow</button>
-                <button class="filter-btn" data-filter="orange-on-black" aria-label="Orange on black">Orange on Black</button>
-                <button class="filter-btn" data-filter="green-on-black" aria-label="Green on black">Green on Black</button>
-                <button class="filter-btn" data-filter="yellow-on-black" aria-label="Yellow on black">Yellow on Black</button>
-                <button class="filter-btn" data-filter="purple-on-black" aria-label="Purple on black">Purple on Black</button>
+    <!-- Filter sheet (drops from top) -->
+    <div id="menu" role="dialog" aria-label="Color filters" aria-modal="false">
+        <p class="menu-section-title">Color Filters</p>
+        <div class="filter-chip-grid">
+            <button class="filter-btn" data-filter="normal" aria-label="Normal colors" aria-pressed="false">Normal</button>
+            <button class="filter-btn" data-filter="grayscale" aria-label="Grayscale" aria-pressed="false">Grayscale</button>
+            <button class="filter-btn" data-filter="inverted" aria-label="Inverted colors" aria-pressed="false">Inverted</button>
+            <button class="filter-btn" data-filter="inverted-grayscale" aria-label="Inverted grayscale" aria-pressed="false">Inverted Grayscale</button>
+            <button class="filter-btn" data-filter="blue-on-yellow" aria-label="Blue on yellow" aria-pressed="false">Blue on Yellow</button>
+            <button class="filter-btn" data-filter="orange-on-black" aria-label="Orange on black" aria-pressed="false">Orange on Black</button>
+            <button class="filter-btn" data-filter="green-on-black" aria-label="Green on black" aria-pressed="false">Green on Black</button>
+            <button class="filter-btn" data-filter="yellow-on-black" aria-label="Yellow on black" aria-pressed="false">Yellow on Black</button>
+            <button class="filter-btn" data-filter="purple-on-black" aria-label="Purple on black" aria-pressed="false">Purple on Black</button>
+            <button class="filter-btn" data-filter="protanopia" aria-label="Protanopia color simulation" aria-pressed="false">Protanopia</button>
+            <button class="filter-btn" data-filter="deuteranopia" aria-label="Deuteranopia color simulation" aria-pressed="false">Deuteranopia</button>
+            <button class="filter-btn" data-filter="tritanopia" aria-label="Tritanopia color simulation" aria-pressed="false">Tritanopia</button>
+        </div>
+
+        <p class="menu-section-title" style="margin-top:8px;">Adjustments</p>
+        <div class="adjustment-grid">
+            <div class="adjustment-row">
+                <label for="hue">Hue</label>
+                <input type="range" id="hue" min="0" max="360" value="0" aria-label="Hue" aria-valuetext="0°">
             </div>
-
-            <div class="custom-filter">
-                <h3>Adjustable Filters</h3>
-
-                <div class="custom-slider-group">
-                    <div class="custom-slider-col">
-                        <label for="hue">Hue</label>
-                        <input type="range" id="hue" min="0" max="360" value="0" aria-label="Hue" aria-valuetext="0°">
-                    </div>
-                    <div class="custom-slider-col">
-                        <label for="brightness">Brightness</label>
-                        <input type="range" id="brightness" min="0" max="200" value="100" aria-label="Brightness" aria-valuetext="100%">
-                    </div>
-                    <div class="custom-slider-col">
-                        <label for="contrast">Contrast</label>
-                        <input type="range" id="contrast" min="0" max="200" value="100" aria-label="Contrast" aria-valuetext="100%">
-                    </div>
-                    <div class="custom-slider-col">
-                        <label for="saturation">Saturation</label>
-                        <input type="range" id="saturation" min="0" max="200" value="100" aria-label="Saturation" aria-valuetext="100%">
-                    </div>
-                </div>
+            <div class="adjustment-row">
+                <label for="brightness">Brightness</label>
+                <input type="range" id="brightness" min="0" max="200" value="100" aria-label="Brightness" aria-valuetext="100%">
+            </div>
+            <div class="adjustment-row">
+                <label for="contrast">Contrast</label>
+                <input type="range" id="contrast" min="0" max="200" value="100" aria-label="Contrast" aria-valuetext="100%">
+            </div>
+            <div class="adjustment-row">
+                <label for="saturation">Saturation</label>
+                <input type="range" id="saturation" min="0" max="200" value="100" aria-label="Saturation" aria-valuetext="100%">
             </div>
         </div>
     </div>
+
+    <!-- Zoom control (right side, vertical) -->
+    <div class="zoom-control" aria-label="Zoom controls">
+        <button class="zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+        <div class="zoom-slider-wrapper">
+            <input type="range" id="zoom-slider" min="1" max="20" step="0.1" value="1"
+                   aria-label="Zoom level" aria-valuemin="1" aria-valuemax="20">
+        </div>
+        <button class="zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
+        <span class="zoom-label" aria-hidden="true">1×</span>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script defer src="{{ url_for('static', filename='js/samples.js') }}"></script>
 </body>

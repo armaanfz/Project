@@ -109,21 +109,40 @@ function _setActiveFilterBtn(key) {
     document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
         const isActive = btn.dataset.filter === key;
         btn.classList.toggle('active', isActive);
+        btn.classList.toggle('selected', isActive);
         btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
 }
 // ── End settings persistence ──────────────────────────────────────────────────
 
+function wireTouchFriendlyRangeInput(input) {
+  if (!input || input.dataset.touchGuardWired === 'true') return;
+
+  const stopPropagation = (event) => {
+    event.stopPropagation();
+  };
+
+  ['touchstart', 'touchmove', 'touchend', 'touchcancel', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel'].forEach((type) => {
+    input.addEventListener(type, stopPropagation, { passive: true });
+  });
+
+  input.dataset.touchGuardWired = 'true';
+}
+
 const orientationBtn = document.getElementById('mask-orientation-btn');
 if (orientationBtn) {
   orientationBtn.addEventListener('click', () => {
-    // Toggle orientation
-    _barsMaskState.orientation =
-      _barsMaskState.orientation === 'horizontal'
-        ? 'vertical'
-        : 'horizontal';
+    _barsMaskState.orientation = 'horizontal';
+    updateMaskOrientationButton();
+    drawBarsMask();
+    _saveSettings();
+  });
+}
 
-    // Update button label + redraw
+const verticalBtn = document.getElementById('mask-vertical-btn');
+if (verticalBtn) {
+  verticalBtn.addEventListener('click', () => {
+    _barsMaskState.orientation = 'vertical';
     updateMaskOrientationButton();
     drawBarsMask();
     _saveSettings();
@@ -131,14 +150,10 @@ if (orientationBtn) {
 }
 
 function updateMaskOrientationButton() {
-  const btn = document.getElementById('mask-orientation-btn');
-  if (!btn) return;
-
-  // Button shows the NEXT orientation
-  btn.textContent =
-    _barsMaskState.orientation === 'horizontal'
-      ? 'Vertical'
-      : 'Horizontal';
+  const hBtn = document.getElementById('mask-orientation-btn');
+  const vBtn = document.getElementById('mask-vertical-btn');
+  if (hBtn) hBtn.classList.toggle('active', _barsMaskState.orientation === 'horizontal');
+  if (vBtn) vBtn.classList.toggle('active', _barsMaskState.orientation === 'vertical');
 }
 
 // Default filter (none)
@@ -402,6 +417,7 @@ videoContainer.addEventListener('mouseleave', () => {
 });
 
 videoContainer.addEventListener('touchstart', (e) => {
+    if (e.target?.closest?.('input[type="range"]')) return;
     if (e.touches.length === 2) {
         _pinching       = true;
         isDragging      = false;
@@ -419,6 +435,7 @@ videoContainer.addEventListener('touchstart', (e) => {
 });
 
 videoContainer.addEventListener('touchmove', (e) => {
+    if (e.target?.closest?.('input[type="range"]')) return;
     e.preventDefault();
     if (_pinching && e.touches.length === 2) {
         const dist = Math.hypot(
@@ -451,6 +468,7 @@ videoContainer.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 videoContainer.addEventListener('touchend', (e) => {
+    if (e.target?.closest?.('input[type="range"]')) return;
     if (e.touches.length < 2)  _pinching  = false;
     if (e.touches.length === 0) isDragging = false;
 });
@@ -514,6 +532,8 @@ function adjustZoom() {
         zoomSlider.setAttribute('aria-valuenow', String(scale));
         zoomSlider.setAttribute('aria-valuetext', `Zoom ${scale.toFixed(1)}x`);
     }
+    const zoomLabel = document.querySelector('.zoom-label');
+    if (zoomLabel) zoomLabel.textContent = `${scale % 1 === 0 ? scale : scale.toFixed(1)}×`;
     _saveSettings();
 }
 
@@ -744,16 +764,8 @@ function isFilterMenuOpen() {
 }
 
 function setFilterMenuPosition() {
-    if (!menu) return;
-    if (document.fullscreenElement) {
-        menu.style.position = 'absolute';
-        menu.style.top = '10px';
-        menu.style.right = '10px';
-    } else {
-        menu.style.position = 'fixed';
-        menu.style.top = '0';
-        menu.style.right = '0';
-    }
+    // Position is handled entirely by CSS (fixed top:80px left:50% translateX(-50%)).
+    // Nothing to override here.
 }
 
 function showFilterMenu() {
@@ -999,17 +1011,8 @@ function _ensureMaskUIExists() {
     videoContainer.appendChild(maskControls);
   }
 
-  // Add label + input to mask-controls if missing
+  // Add input to mask-controls if missing
   if (maskControls) {
-    if (!document.getElementById('mask-radius-label')) {
-      const label = document.createElement('label');
-      label.id = 'mask-radius-label';
-      label.htmlFor = 'mask-radius';
-      label.style.color = '#fff';
-      label.style.marginRight = '8px';
-      label.textContent = 'Bar size';
-      maskControls.appendChild(label);
-    }
     if (!document.getElementById('mask-radius')) {
       const input = document.createElement('input');
       input.type = 'range';
@@ -1017,12 +1020,14 @@ function _ensureMaskUIExists() {
       input.min = '0';
       input.max = '48';
       input.value = String(_barsMaskState.barPct ?? 5);
-      input.style.width = '280px';
+      input.style.width = '380px';
+      input.style.maxWidth = '60vw';
       input.addEventListener('input', (e) => {
         _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
         drawBarsMask();
         _saveSettings();
       });
+      wireTouchFriendlyRangeInput(input);
       maskControls.appendChild(input);
     }
   }
@@ -1253,8 +1258,7 @@ function resetTutorialViewerState() {
 function updateMaskInvertButton() {
   const btn = document.getElementById('mask-invert-btn');
   if (!btn) return;
-
-  btn.textContent = _barsMaskState.inverted ? 'Normal' : 'Invert';
+  btn.classList.toggle('active', _barsMaskState.inverted);
 }
 
 // Setup on DOM ready (safe to call multiple times)
@@ -1289,6 +1293,7 @@ if (invertBtn) {
 // here at module scope (script is deferred, so the DOM is ready).
 const _maskRadiusEl = document.getElementById('mask-radius');
 if (_maskRadiusEl) {
+  wireTouchFriendlyRangeInput(_maskRadiusEl);
   _maskRadiusEl.addEventListener('input', (e) => {
     _barsMaskState.barPct = Math.max(0, Math.min(48, Number(e.target.value) || 0));
     drawBarsMask();
@@ -1300,6 +1305,10 @@ if (_maskRadiusEl) {
 document.addEventListener('DOMContentLoaded', () => {
   setupBarsMaskFeature();
   _restoreSettings();
+  if (!document.querySelector('.filter-btn.active')) {
+    _setActiveFilterBtn('normal');
+  }
+  wireTouchFriendlyRangeInput(document.getElementById('zoom-slider'));
 
   let overlay, box, textEl, highlight;
   let stepIndex = 0;
@@ -1319,7 +1328,7 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     {
       text: "Use these controls to zoom in and out.",
-      target: ".zoom-container"
+      target: ".zoom-control"
     },
     {
       text: "This is the Filters menu. It changes how colors look.",

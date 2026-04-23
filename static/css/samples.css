@@ -23,568 +23,64 @@
     /* Transitions */
     --t-fast:    0.18s ease;
     --t-default: 0.3s ease;
+
+    /* Glass panel tokens */
+    --glass-bg:      rgba(10, 10, 12, 0.94);
+    --glass-border:  rgba(255, 255, 255, 0.1);
+    --glass-blur:    blur(28px);
+    --bar-bg:        rgba(8, 8, 8, 0.9);
+    --bar-border:    rgba(255, 255, 255, 0.09);
 }
 
-/* Fullscreen adjustments and UI styling */
+/* ── Reset / base ───────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 body, html {
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-body);
-  height: 100%;
-  background-color: #111;
-  color: #fff;
-  overflow: hidden;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-body);
+    width: 100vw;
+    height: 100vh;
+    background-color: #0a0a0a;
+    color: #fff;
+    overflow: hidden;
 }
 
-
-.video-container {
-  overflow: hidden;
-  position: relative;
-}
-
+/* ── Video container (fullscreen background) ────────────────────────────────── */
 #video-container {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: grab;
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: grab;
+    z-index: 0;
 }
 
 #video-container:active {
-  cursor: grabbing;
+    cursor: grabbing;
 }
 
+/* ── Camera video element ───────────────────────────────────────────────────── */
 #video {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(1);
-  transform-origin: center center;
-  width: 100vw;
-  height: 100vh;
-  object-fit: cover;
-  transition: transform 0.3s ease;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    transform-origin: center center;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+    z-index: 0;
 }
 
-#controls {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 10px;
-}
-
-.btn {
-  padding: 15px 20px;
-  font-size: var(--fs-lg);
-  font-family: var(--font-body);
-  font-weight: 700;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--accent-color);
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  cursor: pointer;
-  transition: transform var(--t-default), box-shadow var(--t-default);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-}
-
-.btn:hover {
-  transform: scale(1.08);
-  box-shadow:
-    0 4px 16px rgba(0,0,0,0.5),
-    0 0 12px rgba(var(--accent-color-rgb), 0.65);
-}
-
-.btn:focus-visible,
-.filter-btn:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-}
-
-/* Custom Colors for Filter Buttons */
-.filter-btn:nth-child(1) { background-color: #3498db; color: white; } /* Normal */
-.filter-btn:nth-child(2) { background-color: #e74c3c; color: white; } /* Protanopia */
-.filter-btn:nth-child(3) { background-color: #2ecc71; color: black; } /* Deuteranopia */
-.filter-btn:nth-child(4) { background-color: #f1c40f; color: black; } /* Tritanopia */
-.filter-btn:nth-child(5) { background-color: #7f8c8d; color: white; } /* Grayscale */
-.filter-btn:nth-child(6) { background-color: #34495e; color: white; } /* Inverted */
-.filter-btn:nth-child(7) { background-color: #2c3e50; color: white; } /* Inverted Grayscale */
-.filter-btn:nth-child(8) { background-color: #0033cc; color: white; } /* Blue on Yellow */
-.filter-btn:nth-child(9) { background-color: #ff6600; color: black; } /* Neon Orange on Black */
-.filter-btn:nth-child(10) { background-color: #00ff00; color: black; } /* Neon Green on Black */
-.filter-btn:nth-child(11) { background-color: #ffdd00; color: black; } /* Yellow on Black */
-.filter-btn:nth-child(12) { background-color: #800080; color: white; } /* Purple on Black */
-
-/* Filter buttons: C1 fix — single definition, no !important */
-.filter-btn {
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    line-height: 1.1;
-    font-size: var(--fs-xl);
-    font-family: var(--font-body);
-    font-weight: 700;
-    padding: 10px 14px;
-    min-width: 80px;
-    min-height: 65px;
-    border-radius: var(--radius-pill);
-    background-color: #000;
-    color: var(--accent-color);
-    border: none;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: transform var(--t-fast), box-shadow var(--t-fast);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-}
-
-/* Hover glow */
-.filter-btn:hover {
-  transform: scale(1.08);
-  box-shadow:
-    0 4px 16px rgba(0,0,0,0.4),
-    0 0 16px rgba(var(--accent-color-rgb), 0.55);
-}
-
-/* When placed inside a flex-wrap container, allow them to shrink gracefully */
-#menu.active .filter-btn {
-flex: 0 1 auto;
-}
-
-/* Fix 4: Removed first duplicate .scrollable block and its webkit scrollbar rules.
- The second definition below is the effective one and is kept. */
-.scrollable {
-  max-height: none;
-  overflow: visible;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-  width: 100%;
-}
-
-@media (max-width: 800px) {
-  #menu {
-      width: 100%; /* Full-width menu on smaller screens */
-      height: auto;
-      overflow-y: auto; /* Ensure scroll on small devices */
-  }
-}
-
-/* Container for adjustable filters */
-.custom-filter {
-margin-top: 5px;
-background-color: transparent; /* make transparent if preferred, or keep #222 */
-padding: 12px 16px;
-border-radius: 8px;
-box-sizing: border-box;
-}
-
-/* Constrained center area for sliders */
-.custom-slider-group {
-display: flex;
-gap: 6px;
-flex-wrap: wrap;              /* allow wrapping on small screens */
-justify-content: center;      /* center content */
-align-items: stretch;
-margin: 0 auto;
-box-sizing: border-box;
-}
-
-/* Each slider column — flexible */
-.custom-slider-col {
-display: flex;
-flex-direction: row;       /* label + slider inline */
-align-items: center;
-gap: 12px;
-flex: 1 1 24%;             /* try to fit 4 across (≈24% each) */
-min-width: 200px;
-max-width: 300px;
-box-sizing: border-box;
-border: 3px solid #666;       /* border color */
-border-radius: 36px;          /* rounded corners */
-padding: 12px 18px;           /* breathable spacing inside the box */
-background: rgba(0, 0, 0, 0.35); /* subtle dark background */
-box-shadow: 0 4px 12px rgba(0,0,0,0.4); /* soft shadow for depth */
-}
-
-/* label */
-.custom-slider-col label {
-color: #fff;
-font-size: 24px;
-font-weight: 700;
-min-width: 25px;
-text-align: left;
-}
-
-/* slider — C3 fix: accent-color replaces hard-coded #0078ff */
-.custom-slider-col input[type="range"] {
-flex: 1;
-cursor: pointer;
-accent-color: var(--accent-color);
-height: 20px;
-border-radius: 10px;
-max-width: calc(100% - 70px); /* leave space for label */
--webkit-appearance: none;
-appearance: none;
-background: #444;
-}
-.custom-slider-col input[type="range"]::-webkit-slider-thumb {
--webkit-appearance: none;
-width: 30px; height: 30px; border-radius: 50%;
-background: var(--accent-color); border: 4px solid #fff;
-transition: transform var(--t-fast); /* M4 fix: was missing */
-}
-
-.custom-slider-col input[type="range"]::-webkit-slider-thumb:hover {
-transform: scale(1.2);
-}
-
-.custom-slider-col input[type="range"]::-moz-range-thumb {
-width: 30px;
-height: 30px;
-border-radius: 50%;
-background: var(--accent-color);
-border: 4px solid #fff;
-cursor: pointer;
-transition: transform var(--t-fast);
-}
-
-.custom-slider-col input[type="range"]::-moz-range-thumb:hover {
-transform: scale(1.2);
-}
-
-/* Predefined filters section appearing at the top instead of the right side */
-#filter-list h3 {
-  display: none; /* Hide the 'Predefined Filters' heading */
-}
-
-/* Fix 4: Removed first duplicate #menu and #menu.active blocks.
- The definitions below are the effective ones and are kept. */
-#menu {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  height: auto;
-  background-color: rgba(0, 0, 0, 0.9);
-  display: none;
-  padding: 10px 20px;
-  z-index: 999;
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
-}
-
-#menu.active {
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-/* C1 fix: duplicate .filter-btn block removed — see single definition above */
-
-.zoom-container {
-position: absolute;
-top: 50%;
-right: 0px;
-transform: translateY(-50%);
-display: flex;
-flex-direction: column;
-align-items: center;
-gap: 150px;
-}
-
-/* ------- Custom zoom slider (styled like other sliders) ------- */
-/* --- Stable vertical custom zoom slider (rotate technique) --- */
-#zoom-slider {
--webkit-appearance: none;
-appearance: none;
-
-width: 300px;        /* horizontal length BEFORE rotation */
-height: 36px;        /* thickness BEFORE rotation */
-transform: rotate(-90deg); /* rotate to make it vertical */
-
-position: relative;
-background: transparent;
-cursor: pointer;
-
-/* prevent layout shift caused by rotation */
-transform-origin: center;
-}
-
-#zoom-slider:focus-visible {
-outline: 2px solid var(--accent-color);
-outline-offset: 2px;
-}
-
-/* Track */
-#zoom-slider::-webkit-slider-runnable-track {
-width: 100%;
-height: 36px;
-background: #444;
-border-radius: 15px;
-}
-#zoom-slider::-moz-range-track {
-width: 100%;
-height: 36px;
-background: #444;
-border-radius: 15px;
-}
-
-/* Thumb */
-#zoom-slider::-webkit-slider-thumb {
--webkit-appearance: none;
-appearance: none;
-
-width: 36px;
-height: 36px;
-border-radius: 50%;
-background: var(--accent-color); /* C4 fix: was #ffd900 typo */
-border: 4px solid #000;
-margin-top: 0;
-box-shadow: 0 2px 6px rgba(0,0,0,0.6);
-transform: scale(1.2);
-}
-
-#zoom-slider::-moz-range-thumb {
-width: 36px;
-height: 36px;
-border-radius: 50%;
-background: var(--accent-color);
-border: 4px solid #000;
-box-shadow: 0 2px 6px rgba(0,0,0,0.6);
-}
-
-.zoom-btn {
-width: 64px;
-height: 64px;
-font-size: var(--fs-2xl);
-font-family: var(--font-body);
-font-weight: 700;
-line-height: 1;
-border-radius: var(--radius-full);
-padding: 0;
-background: rgba(0, 0, 0, 0.8);
-backdrop-filter: blur(8px);
--webkit-backdrop-filter: blur(8px);
-color: var(--accent-color);
-border: none;
-cursor: pointer;
-display: inline-flex;
-align-items: center;
-justify-content: center;
-transition: transform var(--t-fast), box-shadow var(--t-fast);
-box-shadow:
-    0 4px 12px rgba(0,0,0,0.5),
-    inset 0 1px 0 rgba(255,255,255,0.06);
-}
-
-.zoom-btn:hover {
-transform: scale(1.15);
-box-shadow:
-    0 6px 20px rgba(0,0,0,0.6),
-    0 0 20px rgba(var(--accent-color-rgb), 0.7);
-}
-
-#back-btn {
-position: absolute;
-top: 20px;
-left: 20px;
-z-index: 200;
-background: rgba(0, 0, 0, 0.65);
-backdrop-filter: blur(8px);
--webkit-backdrop-filter: blur(8px);
-color: var(--accent-color);
-border: 1.5px solid rgba(var(--accent-color-rgb), 0.4);
-border-radius: var(--radius-sm);
-padding: 12px 18px;
-font-size: var(--fs-md);
-font-family: var(--font-body);
-font-weight: 700;
-cursor: pointer;
-transition: all var(--t-default);
-}
-
-#back-btn:hover {
-border-color: var(--accent-color);
-background: rgba(var(--accent-color-rgb), 0.08);
-box-shadow: 0 0 12px rgba(var(--accent-color-rgb), 0.5);
-}
-
-#reset-btn {
-transition: 0.3s ease;
-}
-
-#reset-btn.hidden {
-opacity: 0;
-pointer-events: none;
-display: none;
-}
-
-/* ---------- Letterbox mask (top + bottom bars) UI styling ---------- */
-
-/* Overlay canvas that draws the two black bars */
-#mask-overlay {
-position: absolute;
-left: 0;
-top: 0;
-width: 100%;
-height: 100%;
-pointer-events: none;    /* allow clicks through to UI */
-}
-
-/* Mask controls panel (hidden until mask active) */
-#mask-controls {
-position: absolute;
-bottom: 80px;
-left: 50%;
-transform: translateX(-50%);
-z-index: 600;
-font-size: 24px;
-display: flex;
-align-items: center;
-gap: 8px;
-background: rgba(0,0,0,0.56);
-padding: 8px 12px;
-border-radius: 10px;
-border: 2px solid rgba(var(--accent-color-rgb), 0.08);
-box-shadow: 0 6px 18px rgba(0,0,0,0.6);
-}
-
-#mask-controls input[type="range"] {
-height: 0px;
--webkit-appearance: none;
-appearance: none;
-}
-
-/* WebKit browsers (Chrome, Edge, Safari) */
-#mask-controls input[type="range"]::-webkit-slider-runnable-track {
-height: 24px;
-background: #444;
-border-radius: 14px;
-border: 3px solid #222;
-}
-
-/* Firefox */
-#mask-controls input[type="range"]::-moz-range-track {
-height: 24px;
-background: #444;
-border-radius: 14px;
-border: 3px solid #222;
-}
-
-/* Thumb — scale it to match thicker bar */
-#mask-controls input[type="range"]::-webkit-slider-thumb {
--webkit-appearance: none;
-appearance: none;
-
-width: 33px;
-height: 33px;
-border-radius: 50%;
-
-background-color: var(--accent-color) !important;
-border: 3.5px solid #000;
-
-margin-top: -7px;
-cursor: pointer;
-}
-
-/* Hover state */
-#mask-controls input[type="range"]::-webkit-slider-thumb:hover {
-transform: scale(1.15);
-}
-
-/* Active (dragging) state */
-#mask-controls input[type="range"]::-webkit-slider-thumb:active {
-transform: scale(1.2);
-}
-
-/* Firefox */
-#mask-controls input[type="range"]::-moz-range-thumb {
-width: 33px;
-height: 33px;
-border-radius: 50%;
-
-background-color: var(--accent-color) !important;
-border: 3.5px solid #000;
-
-cursor: pointer;
-}
-
-/* Kill Firefox inner focus / purple fill */
-#mask-controls input[type="range"]::-moz-focus-inner {
-border: 0;
-}
-
-#mask-controls input[type="range"]:focus-visible {
-outline: 2px solid var(--accent-color);
-outline-offset: 2px;
-}
-
-/* Mask button active state */
-#filter-button.active,
-#mask-btn.active {
-background-color: var(--accent-color);
-color: #000;
-box-shadow: 0 0 12px rgba(var(--accent-color-rgb), 0.8);
-transform: scale(1.03);
-}
-
-/* Filter button active state */
-.filter-btn.active {
-border: 2px solid var(--accent-color);
-box-shadow:
-    0 0 10px rgba(var(--accent-color-rgb), 0.6),
-    0 2px 8px rgba(0,0,0,0.4);
-}
-
-/* Camera error card */
-.camera-error {
-display: flex;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-gap: 12px;
-padding: 32px 24px;
-background: rgba(0, 0, 0, 0.85);
-border: 2px solid var(--accent-color);
-border-radius: 12px;
-color: var(--accent-color);
-text-align: center;
-max-width: 420px;
-margin: auto;
-position: absolute;
-top: 50%;
-left: 50%;
-transform: translate(-50%, -50%);
-z-index: 999;
-}
-
-.camera-error h2 {
-font-size: 1.5rem;
-margin: 0;
-}
-
-.camera-error p {
-font-size: 1rem;
-color: #ccc;
-margin: 0;
-}
-
-
-/* ================== Remote view ================== */
-
+/* ── Remote stream canvas ───────────────────────────────────────────────────── */
 #stream-canvas {
     position: absolute;
     top: 50%;
@@ -594,8 +90,535 @@ margin: 0;
     width: 100vw;
     height: 100vh;
     transition: transform 0.3s ease;
+    z-index: 0;
 }
 
+/* ── Back button ────────────────────────────────────────────────────────────── */
+#back-btn {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 400;
+    background: rgba(8, 8, 8, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 100px;
+    padding: 10px 20px;
+    font-size: var(--fs-sm);
+    font-family: var(--font-body);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--t-default), border-color var(--t-default), box-shadow var(--t-default);
+}
+
+#back-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.25);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+#back-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* ── Control bar ────────────────────────────────────────────────────────────── */
+#controls {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 400;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bar-bg);
+    border: 1px solid var(--bar-border);
+    border-radius: 100px;
+    padding: 8px 12px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* Vertical divider inside control bar */
+.ctrl-divider {
+    width: 1px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 0 4px;
+    flex-shrink: 0;
+}
+
+/* ── Control bar buttons ────────────────────────────────────────────────────── */
+.ctrl-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 18px;
+    font-size: var(--fs-sm);
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    background: transparent;
+    border: none;
+    border-radius: 100px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--t-fast), color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.ctrl-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+.ctrl-btn.active {
+    background: rgba(var(--accent-color-rgb), 0.15);
+    color: var(--accent-color);
+    box-shadow: 0 0 0 1px rgba(var(--accent-color-rgb), 0.4) inset;
+}
+
+.ctrl-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* Keep legacy .btn class working for non-control-bar buttons (camera-error, tutorial) */
+.btn {
+    padding: 12px 20px;
+    font-size: var(--fs-sm);
+    font-family: var(--font-body);
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 100px;
+    color: #fff;
+    background: rgba(8, 8, 8, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    transition: background var(--t-default), border-color var(--t-default), box-shadow var(--t-default);
+}
+
+.btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* ── Filter sheet (#menu) ───────────────────────────────────────────────────── */
+#menu {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(900px, calc(100% - 40px));
+    z-index: 500;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+    padding: 20px 24px;
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+}
+
+#menu.active {
+    display: flex;
+}
+
+/* Section titles inside filter sheet */
+.menu-section-title {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    margin: 0 0 8px 0;
+}
+
+/* Filter chip grid */
+.filter-chip-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* ── Filter chip buttons ────────────────────────────────────────────────────── */
+.filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 18px;
+    font-size: var(--fs-sm);
+    font-family: var(--font-body);
+    font-weight: 700;
+    border: none;
+    border-radius: 100px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform var(--t-fast), box-shadow var(--t-fast), outline var(--t-fast);
+}
+
+.filter-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.filter-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* Active / selected chip */
+.filter-btn.active,
+.filter-btn.selected {
+    outline: 3px solid rgba(255, 255, 255, 0.85);
+    outline-offset: 2px;
+}
+
+/* Individual chip colors — by data-filter attribute */
+.filter-btn[data-filter="normal"]           { background: #3498db; color: #fff; }
+.filter-btn[data-filter="grayscale"]        { background: #7f8c8d; color: #fff; }
+.filter-btn[data-filter="inverted"]         { background: #34495e; color: #fff; }
+.filter-btn[data-filter="inverted-grayscale"] { background: #2c3e50; color: #fff; }
+.filter-btn[data-filter="blue-on-yellow"]   { background: #0033cc; color: #fff; }
+.filter-btn[data-filter="orange-on-black"]  { background: #ff6600; color: #000; }
+.filter-btn[data-filter="green-on-black"]   { background: #00ff00; color: #000; }
+.filter-btn[data-filter="yellow-on-black"]  { background: #ffdd00; color: #000; }
+.filter-btn[data-filter="purple-on-black"]  { background: #800080; color: #fff; }
+.filter-btn[data-filter="protanopia"]       { background: #e74c3c; color: #fff; }
+.filter-btn[data-filter="deuteranopia"]     { background: #2ecc71; color: #000; }
+.filter-btn[data-filter="tritanopia"]       { background: #f1c40f; color: #000; }
+
+/* ── Adjustment sliders section ─────────────────────────────────────────────── */
+.adjustment-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+@media (max-width: 520px) {
+    .adjustment-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.adjustment-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 10px 14px;
+}
+
+.adjustment-row label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    min-width: 76px;
+    flex-shrink: 0;
+}
+
+.adjustment-row input[type="range"] {
+    flex: 1;
+    cursor: pointer;
+    accent-color: var(--accent-color);
+    height: 18px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 9px;
+}
+
+.adjustment-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    border: 3px solid #fff;
+    cursor: pointer;
+    transition: transform var(--t-fast);
+}
+
+.adjustment-row input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+
+.adjustment-row input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    border: 3px solid #fff;
+    cursor: pointer;
+    transition: transform var(--t-fast);
+}
+
+.adjustment-row input[type="range"]:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* ── Mask sheet (#mask-controls) ────────────────────────────────────────────── */
+#mask-controls {
+    position: fixed;
+    bottom: 88px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 450;
+    width: min(480px, calc(100% - 40px));
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+    padding: 16px 20px;
+    flex-direction: column;
+    gap: 12px;
+    /* shown/hidden via display style in JS */
+}
+
+/* Slider row inside mask panel */
+.mask-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mask-slider-row label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#mask-radius {
+    flex: 1;
+    cursor: pointer;
+    accent-color: var(--accent-color);
+    height: 20px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    max-width: 100%;
+}
+
+#mask-radius::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    border: 3px solid #000;
+    cursor: pointer;
+    transition: transform var(--t-fast);
+}
+
+#mask-radius::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+
+#mask-radius::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    border: 3px solid #000;
+    cursor: pointer;
+}
+
+#mask-radius:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* Mask orientation/invert button row */
+.mask-btn-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mask-option-btn {
+    flex: 1;
+    padding: 9px 14px;
+    font-size: var(--fs-sm);
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 100px;
+    cursor: pointer;
+    text-align: center;
+    transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+    white-space: nowrap;
+}
+
+.mask-option-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.mask-option-btn.active {
+    background: rgba(var(--accent-color-rgb), 0.15);
+    color: var(--accent-color);
+    border-color: rgba(var(--accent-color-rgb), 0.4);
+}
+
+.mask-option-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* ── Zoom control (right side) ──────────────────────────────────────────────── */
+.zoom-control {
+    position: fixed;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Zoom +/- buttons */
+.zoom-btn {
+    width: 48px;
+    height: 48px;
+    font-size: var(--fs-lg);
+    font-family: var(--font-body);
+    font-weight: 700;
+    line-height: 1;
+    border-radius: var(--radius-full);
+    padding: 0;
+    background: rgba(8, 8, 8, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.zoom-btn:hover {
+    transform: scale(1.1);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+}
+
+.zoom-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* Zoom slider wrapper — gives the rotated slider a proper bounding box in the flex layout */
+.zoom-slider-wrapper {
+    position: relative;
+    width: 48px;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+}
+
+/* Zoom level label */
+.zoom-label {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.04em;
+}
+
+/* Zoom slider — rotated to appear vertical */
+#zoom-slider {
+    position: absolute;
+    width: 280px;
+    height: 12px;
+    transform: rotate(-90deg);
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    outline: none;
+}
+
+#zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    border: 3px solid #fff;
+    cursor: pointer;
+    transition: transform var(--t-fast), box-shadow var(--t-fast);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+#zoom-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.65);
+}
+
+#zoom-slider::-moz-range-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    border: 3px solid #fff;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+
+#zoom-slider::-moz-range-thumb:hover {
+    transform: scale(1.15);
+}
+
+#zoom-slider:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 4px;
+}
+
+/* ── Mask overlay canvas ────────────────────────────────────────────────────── */
+#mask-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+/* ── Remote status badge ────────────────────────────────────────────────────── */
 #remote-status-badge {
     position: fixed;
     top: 20px;
@@ -603,13 +626,13 @@ margin: 0;
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: rgba(0,0,0,0.72);
+    background: rgba(8, 8, 8, 0.72);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    color: var(--accent-color); /* C2 fix: was #7CFC00 */
-    border: 1px solid var(--accent-color); /* C2 fix: was #7CFC00 */
-    border-radius: var(--radius-sm);
-    padding: 6px 14px;
+    color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 100px;
+    padding: 7px 14px;
     font-size: var(--fs-sm);
     font-family: var(--font-body);
     font-weight: 600;
@@ -617,7 +640,6 @@ margin: 0;
     pointer-events: none;
 }
 
-/* Indicator dot */
 #remote-status-badge::before {
     content: '';
     display: inline-block;
@@ -629,20 +651,17 @@ margin: 0;
     flex-shrink: 0;
 }
 
-/* Green dot when connected */
 #remote-status-badge[data-state="connected"]::before {
     background: #4ade80;
 }
 
-/* Red dot on error/reconnecting */
 #remote-status-badge[data-state="error"]::before {
     background: #ff6b6b;
 }
 
-/* Red text/border on error */
 #remote-status-badge[data-state="error"] {
     color: #ff6b6b;
-    border-color: #ff6b6b;
+    border-color: rgba(255, 107, 107, 0.4);
 }
 
 @keyframes status-pulse {
@@ -650,75 +669,98 @@ margin: 0;
     50%       { opacity: 0.4; transform: scale(0.75); }
 }
 
-/* ================== Tutorial System ================== */
+/* ── Camera error card ──────────────────────────────────────────────────────── */
+.camera-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 32px 24px;
+    background: rgba(10, 10, 12, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    backdrop-filter: blur(28px);
+    color: #fff;
+    text-align: center;
+    max-width: 420px;
+    margin: auto;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 999;
+}
 
-/* Dark overlay */
+.camera-error h2 {
+    font-size: 1.4rem;
+    margin: 0;
+    color: var(--accent-color);
+}
+
+.camera-error p {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0;
+}
+
+/* ── Tutorial system ────────────────────────────────────────────────────────── */
 .tutorial-overlay {
-position: fixed;
-inset: 0;
-background: rgba(0,0,0,0.6);
-z-index: 5000;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 5000;
 }
 
-/* CENTERED tutorial box */
 .tutorial-box {
-position: fixed;
-top: 50%;
-left: 50%;
-transform: translate(-50%, -50%);
-max-width: 700px;
-width: calc(100% - 40px);
-background: #000;
-color: var(--accent-color);
-font-size: clamp(18px, 5vw, 28px);
-padding: 26px;
-border-radius: 20px;
-text-align: center;
-box-shadow: 0 0 30px rgba(var(--accent-color-rgb), 0.8);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 700px;
+    width: calc(100% - 40px);
+    background: rgba(10, 10, 12, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    backdrop-filter: blur(28px);
+    color: #fff;
+    font-size: clamp(var(--fs-md), 5vw, var(--fs-xl));
+    padding: 28px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(var(--accent-color-rgb), 0.5);
 }
 
-/* Buttons row */
 .tutorial-buttons {
-display: grid;
-grid-template-columns: repeat(3, minmax(0, 1fr));
-align-items: center;
-margin-top: 18px;
-gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: center;
+    margin-top: 20px;
+    gap: 12px;
 }
 
 .tutorial-hidden {
-display: none;
+    display: none;
 }
 
-.tutorial-back-btn {
-grid-column: 1;
-justify-self: start;
-}
-
+.tutorial-back-btn  { grid-column: 1; justify-self: start; }
 .tutorial-next-btn,
-.tutorial-finish-btn {
-grid-column: 2;
-justify-self: center;
-}
+.tutorial-finish-btn { grid-column: 2; justify-self: center; }
+.tutorial-exit-btn  { grid-column: 3; justify-self: end; }
 
-.tutorial-exit-btn {
-grid-column: 3;
-justify-self: end;
-}
-
-/* Highlight ring */
 .tutorial-highlight {
-position: fixed;
-border: 5px solid var(--accent-color);
-border-radius: 14px;
-box-shadow: 0 0 25px rgba(var(--accent-color-rgb), 0.9);
-pointer-events: none;
-z-index: 5500;
+    position: fixed;
+    border: 4px solid var(--accent-color);
+    border-radius: 16px;
+    box-shadow: 0 0 30px rgba(var(--accent-color-rgb), 0.8);
+    pointer-events: none;
+    z-index: 5500;
 }
 
-/* ── Forced-colors / high-contrast mode (Windows HC, macOS Increase Contrast) ── */
+/* ── Forced-colors / high-contrast mode ─────────────────────────────────────── */
 @media (forced-colors: active) {
-    .btn {
+    .btn,
+    .ctrl-btn,
+    .mask-option-btn {
         border: 2px solid ButtonText;
         color: ButtonText;
         background: ButtonFace;
@@ -728,13 +770,15 @@ z-index: 5500;
         border: 2px solid ButtonText;
         background: ButtonFace;
         color: ButtonText;
-    }
-    .filter-btn.active {
-        border: 3px solid Highlight;
         forced-color-adjust: none;
     }
-    #filter-button.active,
-    #mask-btn.active {
+    .filter-btn.active,
+    .filter-btn.selected {
+        outline: 3px solid Highlight;
+        forced-color-adjust: none;
+    }
+    .ctrl-btn.active,
+    .mask-option-btn.active {
         border: 3px solid Highlight;
         background: Highlight;
         color: HighlightText;
@@ -755,9 +799,29 @@ z-index: 5500;
         box-shadow: none;
     }
     #zoom-slider:focus-visible,
-    #mask-controls input[type="range"]:focus-visible,
+    #mask-radius:focus-visible,
+    .adjustment-row input[type="range"]:focus-visible,
     .btn:focus-visible,
+    .ctrl-btn:focus-visible,
     .filter-btn:focus-visible {
         outline: 3px solid Highlight;
+    }
+}
+
+/* ── Responsive tweaks ──────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    #controls {
+        padding: 6px 8px;
+    }
+    .ctrl-btn {
+        padding: 9px 12px;
+        font-size: var(--fs-xs);
+    }
+    #menu {
+        top: 72px;
+        padding: 14px 16px;
+    }
+    .zoom-control {
+        right: 12px;
     }
 }

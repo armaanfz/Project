@@ -23,6 +23,13 @@
     /* Transitions */
     --t-fast:    0.18s ease;
     --t-default: 0.3s ease;
+
+    /* Glass / surface tokens (shared with samples page) */
+    --glass-bg:     rgba(10, 10, 12, 0.94);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-blur:   blur(28px);
+    --bar-bg:       rgba(8, 8, 8, 0.9);
+    --bar-border:   rgba(255, 255, 255, 0.09);
 }
 
 body {
@@ -84,7 +91,7 @@ nav ul li a {
     color: #ffffff;
     text-decoration: none;
     font-weight: 700;
-    font-size: 18px;
+    font-size: var(--fs-md);
 }
 
 nav ul li a:hover {
@@ -144,7 +151,7 @@ nav ul li a:focus-visible,
 .quick-start {
     position: sticky;
     top: 20px;
-    padding: 20px;
+    padding: 24px;
 }
 
 .content-panel h2,
@@ -223,17 +230,27 @@ nav ul li a:focus-visible,
 .retry-btn {
     margin-top: 12px;
     padding: 10px 20px;
-    font-size: 16px;
+    font-size: var(--fs-sm);
+    font-family: var(--font-body);
+    font-weight: 800;
     cursor: pointer;
-    background-color: var(--accent-color);
-    color: #000;
-    border: 2px solid var(--accent-color);
-    border-radius: 8px;
-    font-weight: 700;
+    background: linear-gradient(
+        135deg,
+        rgba(var(--accent-color-rgb), 0.10) 0%,
+        rgba(0, 0, 0, 0.65) 100%
+    );
+    color: var(--accent-color);
+    border: 1.5px solid var(--accent-color);
+    border-radius: var(--radius-sm);
+    transition: transform var(--t-default), box-shadow var(--t-default), background var(--t-default);
 }
 
 .retry-btn:hover {
-    background-color: #000;
+    transform: translateY(-2px);
+    box-shadow:
+        0 6px 24px rgba(0, 0, 0, 0.5),
+        0 0 18px rgba(var(--accent-color-rgb), 0.35);
+    background: rgba(var(--accent-color-rgb), 0.1);
     color: var(--accent-color);
 }
 
@@ -275,7 +292,7 @@ nav ul li a:focus-visible,
 }
 
 .shutdown-btn:hover:not(:disabled) {
-    background-color: #4a1515;
+    background: rgba(255, 107, 107, 0.12);
 }
 
 .shutdown-btn:disabled {
@@ -353,15 +370,18 @@ nav ul li a:focus-visible,
 
 /* ── Cloudflare tunnel URL box (home screen) ──────────────────────────────── */
 #tunnel-box {
-    background: rgba(30, 30, 30, 0.95);
-    border: 1px solid var(--accent-color);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid rgba(var(--accent-color-rgb), 0.25);
     border-radius: 8px;
     padding: 12px 14px;
     margin-top: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .tunnel-label {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: rgba(255, 255, 255, 0.6);
     margin: 0 0 6px;
 }
@@ -369,7 +389,7 @@ nav ul li a:focus-visible,
 #tunnel-url-text {
     color: var(--accent-color);
     word-break: break-all;
-    font-size: 14px;
+    font-size: var(--fs-sm);
     margin: 0;
 }
 
@@ -387,18 +407,21 @@ nav ul li a:focus-visible,
     width: 100%;
     margin-top: 8px;
     padding: 10px 20px;
-    font-size: 16px;
-    cursor: pointer;
-    background-color: var(--accent-color);
-    color: #000;
-    border: 2px solid var(--accent-color);
-    border-radius: 8px;
+    font-size: var(--fs-sm);
+    font-family: var(--font-body);
     font-weight: 700;
+    cursor: pointer;
+    background: transparent;
+    color: var(--accent-color);
+    border: 1.5px solid rgba(var(--accent-color-rgb), 0.5);
+    border-radius: var(--radius-sm);
+    transition: background var(--t-default), box-shadow var(--t-default);
 }
 
 #tunnel-qr-btn:hover {
-    background-color: #000;
+    background: rgba(var(--accent-color-rgb), 0.1);
     color: var(--accent-color);
+    box-shadow: 0 0 12px rgba(var(--accent-color-rgb), 0.2);
 }
 
 #tunnel-qr-box {
@@ -434,13 +457,15 @@ nav ul li a:focus-visible,
     .quick-start {
         border: 2px solid CanvasText;
     }
-    .start-btn {
+    .start-btn,
+    .retry-btn {
         border: 2px solid ButtonText;
         color: ButtonText;
         background: ButtonFace;
         forced-color-adjust: none;
     }
     .start-btn:focus-visible,
+    .retry-btn:focus-visible,
     nav ul li a:focus-visible {
         outline: 3px solid Highlight;
     }

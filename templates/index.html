@@ -42,7 +42,7 @@
     <aside class="quick-start" aria-label="Quick start">
         <h2>Ready to Read?</h2>
         <p>When you are ready, click the button below to start using the Magnifier.</p>
-        <button class="start-btn" id="start-samples-btn" data-samples-url="{{ url_for('samples') }}">Start Magnifier</button>
+        <button class="start-btn start-btn--primary" id="start-samples-btn" data-samples-url="{{ url_for('samples') }}">Start Magnifier</button>
         <button class="start-btn" id="start-tutorial-btn" data-tutorial-url="{{ url_for('samples') }}?tutorial=1">Tutorial</button>
         <button class="start-btn" id="start-remote-btn" data-remote-url="{{ url_for('remote') }}">Access Remote Stream</button>
         <div class="accent-picker-row">
@@ -58,6 +58,7 @@
                 <img id="tunnel-qr-image" alt="QR code for the remote access URL">
             </div>
         </div>
+        <div class="shutdown-divider" aria-hidden="true"><span>System</span></div>
         <button type="button" class="shutdown-btn" id="shutdown-btn" aria-label="Shut down Raspberry Pi">Shut Down</button>
     </aside>
 </div>

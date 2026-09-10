@@ -1,6 +1,9 @@
 # Magnifier — Design System Audit & Guide
 
 > Generated 2026-03-23 by design-system audit.
+> Historical snapshot: some findings refer to an older layout and have already
+> changed. Check the current CSS before applying recommendations. README.md
+> describes the current application; the design preview is a standalone prototype.
 
 ---
 

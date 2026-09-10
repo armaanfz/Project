@@ -35,8 +35,8 @@ Cloudflare tunnel → :5000
 - Uses `async_mode='threading'` on Windows, `'gevent'` on Linux/Pi
 
 **Frontend pages:**
-- `samples.html` + `static/js/samples.js` — local camera page. Uses `getUserMedia()` → `<video>` → canvas. All zoom/filter/mask logic lives in `samples.js` (~1500 lines).
-- `remote.html` — remote stream viewer. Connects to Socket.IO `/stream` namespace, draws JPEG frames to canvas. Same zoom/filter/mask controls as samples.
+- `samples.html` + `static/js/samples.js` — local camera page. Uses `getUserMedia()` → `<video>` with CSS transforms/filters and a separate mask canvas. All shared viewer logic lives in `samples.js` (~1500 lines).
+- `remote.html` + `static/js/samples.js` — remote stream viewer. Connects to Socket.IO `/stream` namespace, draws JPEG frames to canvas. Uses the shared zoom/filter/mask controls.
 - `index.html` — home page with tabs, tunnel URL display, and shutdown button.
 
 ## Key Design Decisions
@@ -59,6 +59,7 @@ Cloudflare tunnel → :5000
 | `SHUTDOWN_COOLDOWN_SECONDS` | `30` | Min seconds between shutdown calls |
 | `SOCKETIO_ASYNC_MODE` | `threading` (Win) / `gevent` (Linux) | Socket.IO async backend |
 | `STREAM_RELEASE_GRACE_SECONDS` | `2.0` | Camera hold time after last client disconnects |
+| `DISABLE_TUNNEL` | unset | `1`, `true`, or `yes` disables the public tunnel for local development |
 
 ## Testing
 
@@ -68,7 +69,9 @@ pytest                                  # run all tests
 pytest tests/test_app.py -v            # verbose
 ```
 
-Tests live in `tests/test_app.py` and cover Flask routes.
+Backend tests live in `tests/test_app.py` and `tests/test_stream.py`. Optional
+browser tests live in `tests/test_viewer.py`; install `requirements-browser.txt`
+and run `python -m playwright install chromium` first. See README.md for details.
 
 ## Common Development Tasks
 
@@ -84,7 +87,7 @@ Tests live in `tests/test_app.py` and cover Flask routes.
 | I want to... | Look at... |
 |---|---|
 | Change zoom/filter/mask logic | `static/js/samples.js` |
-| Change remote stream rendering | `templates/remote.html` |
+| Change remote stream rendering | `static/js/samples.js:initializeRemoteSocketStream()` |
 | Add a Flask route | `app.py` |
 | Tune camera quality/resolution | `app.py` env-var defaults (`STREAM_PROFILES`) |
 | Change tunnel or shutdown logic | `app.py:_start_tunnel()`, `app.py:shutdown()` |
@@ -94,3 +97,8 @@ Tests live in `tests/test_app.py` and cover Flask routes.
 ## Pi Deployment
 
 Single systemd service running `python app.py` on port 5000. Cloudflare tunnel is managed by app.py itself.
+
+`magnifier-stream.service` starts the complete app; do not run it alongside
+another service that already starts `app.py`. Importing `app` does not launch
+background services. The debug reloader is disabled so only one process owns
+the camera and tunnel.

@@ -220,6 +220,8 @@ body, html {
     left: 50%;
     transform: translateX(-50%);
     width: min(900px, calc(100% - 40px));
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
     z-index: 500;
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
@@ -819,6 +821,7 @@ body, html {
     }
     #menu {
         top: 72px;
+        max-height: calc(100vh - 92px);
         padding: 14px 16px;
     }
     .zoom-control {

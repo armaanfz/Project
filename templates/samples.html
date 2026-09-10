@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Magnifier camera – live zoom, color filters, and focus mask to help you read text more clearly.">
     <title>Magnifier – Camera</title>
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/magnifier.png') }}">
     <!-- restore saved accent colour before CSS loads to avoid flash of default colour -->
     <script>
     (function(){
@@ -69,7 +69,7 @@
     <section id="controls" aria-label="Camera controls">
         <button class="ctrl-btn" id="filter-button" aria-label="Open filters menu" aria-expanded="false">Filters</button>
         <div class="ctrl-divider" aria-hidden="true"></div>
-        <button class="ctrl-btn" id="mask-btn" aria-pressed="false" aria-label="Toggle reading mask">Mask</button>
+        <button class="ctrl-btn" id="mask-btn" aria-pressed="false" aria-expanded="false" aria-controls="mask-controls" aria-label="Toggle reading mask">Mask</button>
         <div class="ctrl-divider" aria-hidden="true"></div>
         <button class="ctrl-btn" id="center-btn" aria-label="Center the view" style="display:none;">Center</button>
         <button class="ctrl-btn" id="reset-btn" aria-label="Reset zoom to default" style="display:none;">Reset Zoom</button>

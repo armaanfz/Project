@@ -43,7 +43,7 @@ PowerShell, use `$env:DISABLE_TUNNEL='1'` and then `python app.py`.
 | `tests/test_app.py` | Routes, shutdown restrictions, configuration, and tunnel lifecycle tests. |
 | `tests/test_stream.py` | Shared capture, quality selection, error recovery, and connection lifecycle tests using a simulated camera. |
 | `tests/test_viewer.py` | Optional Chromium tests for controls, persistence, camera cleanup, and frame decoding. |
-| `DESIGN.md`, `design-tokens.json`, `design-preview.html` | Historical design audit and standalone prototype; they are not loaded by the running app. |
+| `DESIGN.md` | Historical design audit; check the current CSS before applying its recommendations. The older preview assets have been removed from this branch. |
 
 `requirements.txt` contains runtime dependencies, `requirements-dev.txt` adds
 pytest, and `requirements-browser.txt` adds optional Playwright browser tests.

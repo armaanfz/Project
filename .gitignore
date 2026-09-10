@@ -17,7 +17,9 @@ env/
 
 # Downloaded binaries
 cloudflared
+cloudflared.exe
 caddy.exe
 
 # Reports
 .reports/
+.pytest_cache/

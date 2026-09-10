@@ -17,17 +17,35 @@ let translateY = 0; // Y-axis translation
 const CENTER_TOLERANCE_PX = 1;
 
 // Default values for custom filters
-const customFilters = {
+const DEFAULT_CUSTOM_FILTERS = Object.freeze({
     hue: 0,
     brightness: 100,
     contrast: 100,
     saturation: 100,
-};
+});
+const customFilters = { ...DEFAULT_CUSTOM_FILTERS };
+const FILTER_ACTIONS = Object.freeze({
+    'normal': applyNormal,
+    'protanopia': applyProtanopia,
+    'deuteranopia': applyDeuteranopia,
+    'tritanopia': applyTritanopia,
+    'grayscale': applyGrayscale,
+    'inverted': applyInverted,
+    'inverted-grayscale': applyInvertedGrayscale,
+    'blue-on-yellow': applyBlueOnYellow,
+    'orange-on-black': applyNeonOrangeOnBlack,
+    'green-on-black': applyNeonGreenOnBlack,
+    'yellow-on-black': applyYellowOnBlack,
+    'purple-on-black': applyPurpleOnBlack,
+});
 
 // ── Settings persistence ──────────────────────────────────────────────────────
 const _SETTINGS_KEY = 'magnifier_settings';
+let _settingsReady = false;
 
 function _saveSettings() {
+    // Initialization also updates controls; wait until saved values are restored.
+    if (!_settingsReady) return;
     try {
         localStorage.setItem(_SETTINGS_KEY, JSON.stringify({
             zoom: scale,
@@ -50,58 +68,49 @@ function _restoreSettings() {
         if (!raw) return;
         saved = JSON.parse(raw);
     } catch (_) { return; }
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
 
     // Restore zoom
-    if (typeof saved.zoom === 'number' && saved.zoom >= 1) {
+    if (Number.isFinite(saved.zoom) && saved.zoom >= 1) {
         if (zoomSlider) zoomSlider.value = String(saved.zoom);
         adjustZoom();
     }
 
     // Restore predefined filter
-    if (saved.filterKey) {
-        const filterFunctions = {
-            'normal': applyNormal,
-            'protanopia': applyProtanopia,
-            'deuteranopia': applyDeuteranopia,
-            'tritanopia': applyTritanopia,
-            'grayscale': applyGrayscale,
-            'inverted': applyInverted,
-            'inverted-grayscale': applyInvertedGrayscale,
-            'blue-on-yellow': applyBlueOnYellow,
-            'orange-on-black': applyNeonOrangeOnBlack,
-            'green-on-black': applyNeonGreenOnBlack,
-            'yellow-on-black': applyYellowOnBlack,
-            'purple-on-black': applyPurpleOnBlack,
-        };
-        const fn = filterFunctions[saved.filterKey];
-        if (fn) {
-            fn();
-            _setActiveFilterBtn(saved.filterKey);
-        }
+    if (Object.hasOwn(FILTER_ACTIONS, saved.filterKey)) {
+        FILTER_ACTIONS[saved.filterKey]();
+        _setActiveFilterBtn(saved.filterKey);
     }
 
     // Restore custom filter sliders
     if (saved.customFilters) {
-        ['hue', 'brightness', 'contrast', 'saturation'].forEach(key => {
-            if (typeof saved.customFilters[key] !== 'undefined') {
-                customFilters[key] = saved.customFilters[key];
-                const el = document.getElementById(key);
-                if (el) el.value = saved.customFilters[key];
+        Object.keys(DEFAULT_CUSTOM_FILTERS).forEach(key => {
+            const value = saved.customFilters[key];
+            // Older versions saved slider values as strings.
+            if ((typeof value === 'number' || typeof value === 'string')
+                    && Number.isFinite(Number(value))) {
+                const max = key === 'hue' ? 360 : 200;
+                customFilters[key] = Math.max(0, Math.min(max, Number(value)));
             }
         });
+        syncCustomFilterInputs();
         applyCombinedFilters();
     }
 
     // Restore mask state
     if (saved.mask) {
-        _barsMaskState.barPct = saved.mask.barPct ?? _barsMaskState.barPct;
-        _barsMaskState.orientation = saved.mask.orientation ?? _barsMaskState.orientation;
-        _barsMaskState.inverted = saved.mask.inverted ?? _barsMaskState.inverted;
+        if (Number.isFinite(saved.mask.barPct)) {
+            _barsMaskState.barPct = Math.max(0, Math.min(48, saved.mask.barPct));
+        }
+        if (['horizontal', 'vertical'].includes(saved.mask.orientation)) {
+            _barsMaskState.orientation = saved.mask.orientation;
+        }
+        _barsMaskState.inverted = saved.mask.inverted === true;
         const radiusEl = document.getElementById('mask-radius');
         if (radiusEl) radiusEl.value = String(_barsMaskState.barPct);
         updateMaskOrientationButton();
         updateMaskInvertButton();
-        if (saved.mask.enabled) enableBarsMask();
+        if (saved.mask.enabled === true) enableBarsMask();
     }
 }
 
@@ -152,8 +161,12 @@ if (verticalBtn) {
 function updateMaskOrientationButton() {
   const hBtn = document.getElementById('mask-orientation-btn');
   const vBtn = document.getElementById('mask-vertical-btn');
-  if (hBtn) hBtn.classList.toggle('active', _barsMaskState.orientation === 'horizontal');
-  if (vBtn) vBtn.classList.toggle('active', _barsMaskState.orientation === 'vertical');
+  for (const [button, orientation] of [[hBtn, 'horizontal'], [vBtn, 'vertical']]) {
+    if (!button) continue;
+    const active = _barsMaskState.orientation === orientation;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }
 }
 
 // Default filter (none)
@@ -171,6 +184,9 @@ let _pendingPanDy = 0;    // accumulated vertical   delta since last rAF
 let _pinching       = false;
 let _pinchStartDist = 0;
 let _pinchStartZoom = 1;
+let _viewerActive = true;
+let _cameraRequestId = 0;
+let _remoteStreamCleanup = null;
 
 /* ---------- Camera / 1080p helpers ---------- */
 /**
@@ -183,6 +199,7 @@ async function startCamera(videoEl, opts = {}) {
   if (!videoEl || !(videoEl instanceof HTMLVideoElement)) {
     throw new Error('startCamera: videoEl must be a HTMLVideoElement');
   }
+  const requestId = ++_cameraRequestId;
 
   const preferExact = !!opts.preferExact1080;
   const widthConstraint = preferExact ? { exact: 1920 } : { ideal: 1920 };
@@ -197,63 +214,54 @@ async function startCamera(videoEl, opts = {}) {
     }
   };
 
+  let stream = null;
   try {
     // Stop existing stream if any (avoid leak when re-initializing)
     if (videoEl.srcObject && typeof videoEl.srcObject.getTracks === 'function') {
       videoEl.srcObject.getTracks().forEach((t) => t.stop());
     }
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (!_viewerActive || requestId !== _cameraRequestId || !document.body.contains(videoEl)) {
+      stream.getTracks().forEach((track) => track.stop());
+      return null;
+    }
     videoEl.srcObject = stream;
     videoEl.autoplay = true;
     videoEl.playsInline = true;
     videoEl.muted = true; // recommended for autoplay
 
     // Wait for metadata so video.videoWidth/video.videoHeight are available.
-    // Race against a 5-second timeout so we don't hang indefinitely on slow cameras.
-    await Promise.race([
-      new Promise((resolve) => {
-        if (videoEl.readyState >= 1 && videoEl.videoWidth && videoEl.videoHeight) {
-          return resolve();
-        }
-        function onMeta() {
-          videoEl.removeEventListener('loadedmetadata', onMeta);
-          resolve();
-        }
-        videoEl.addEventListener('loadedmetadata', onMeta);
-      }),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error('Camera metadata timed out after 5 s')),
-          5000,
-        )
-      ),
-    ]);
+    await new Promise((resolve, reject) => {
+      if (videoEl.readyState >= 1 && videoEl.videoWidth && videoEl.videoHeight) {
+        resolve();
+        return;
+      }
+      function onMetadata() {
+        clearTimeout(timeoutId);
+        videoEl.removeEventListener('loadedmetadata', onMetadata);
+        resolve();
+      }
+      const timeoutId = setTimeout(() => {
+        videoEl.removeEventListener('loadedmetadata', onMetadata);
+        reject(new Error('Camera metadata timed out after 5 s'));
+      }, 5000);
+      videoEl.addEventListener('loadedmetadata', onMetadata);
+    });
+
+    if (!_viewerActive || requestId !== _cameraRequestId) {
+      stream.getTracks().forEach((track) => track.stop());
+      return null;
+    }
 
     console.log('Camera started. Negotiated resolution:', videoEl.videoWidth, 'x', videoEl.videoHeight);
     return stream;
   } catch (err) {
+    stream?.getTracks().forEach((track) => track.stop());
+    if (videoEl.srcObject === stream) videoEl.srcObject = null;
+    if (!_viewerActive || requestId !== _cameraRequestId) return null;
     console.error('startCamera: getUserMedia failed', err);
     throw err;
   }
-}
-
-function setCanvasToVideoSize(canvas, videoEl, scale = 1.0) {
-  if (!canvas || !videoEl) return;
-
-  // Prefer intrinsic video pixel size; fallback to CSS layout size
-  const videoPixelW = videoEl.videoWidth || Math.round(videoEl.getBoundingClientRect().width);
-  const videoPixelH = videoEl.videoHeight || Math.round(videoEl.getBoundingClientRect().height);
-
-  const w = Math.max(1, Math.round(videoPixelW * scale));
-  const h = Math.max(1, Math.round(videoPixelH * scale));
-
-  // Pixel buffer size used for processing
-  canvas.width = w;
-  canvas.height = h;
-
-  // CSS size (how big the canvas appears on the page) — match layout to preserve appearance
-  canvas.style.width = `${Math.round(videoPixelW)}px`;
-  canvas.style.height = `${Math.round(videoPixelH)}px`;
 }
 
 function resizeRemoteCanvas() {
@@ -265,18 +273,19 @@ function resizeRemoteCanvas() {
 function updateRemoteStatus(text, state = 'default') {
   const badge = document.getElementById('remote-status-badge');
   if (!badge) return;
-  badge.textContent = text;
-  badge.dataset.state = state;
+  if (badge.textContent !== text) badge.textContent = text;
+  if (badge.dataset.state !== state) badge.dataset.state = state;
 }
 
 function formatRemoteStatus(baseText, latencyMs = null) {
-  if (typeof latencyMs !== 'number' || Number.isNaN(latencyMs)) {
+  if (!Number.isFinite(latencyMs)) {
     return baseText;
   }
   return `${baseText} (${Math.max(0, Math.round(latencyMs))}ms)`;
 }
 
 function initializeRemoteSocketStream() {
+  stopRemoteSocketStream();
   if (!remoteCanvasElement || !remoteCanvasContext || typeof window.io !== 'function') {
     updateRemoteStatus('Streaming unavailable', 'error');
     return;
@@ -292,7 +301,10 @@ function initializeRemoteSocketStream() {
     closeOnBeforeunload: true,
   });
   const frameImage = new Image();
-  let _prevFrameUrl = null;
+  let activeFrameUrl = null;
+  let pendingFrame = null;
+  let stopped = false;
+  let lastStatusUpdate = 0;
   const remoteStatusState = {
     baseText: 'Remote Feed - Connecting...',
     state: 'default',
@@ -308,10 +320,71 @@ function initializeRemoteSocketStream() {
     );
   }
 
+  function clearFrames() {
+    pendingFrame = null;
+    frameImage.onload = null;
+    frameImage.onerror = null;
+    frameImage.removeAttribute('src');
+    if (activeFrameUrl) URL.revokeObjectURL(activeFrameUrl);
+    activeFrameUrl = null;
+    remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
+  }
+
+  function decodeFrame(payload) {
+    const frameUrl = URL.createObjectURL(new Blob([payload.data], { type: 'image/jpeg' }));
+    activeFrameUrl = frameUrl;
+    const finishFrame = (loaded) => {
+      if (stopped || activeFrameUrl !== frameUrl) return;
+      try {
+        if (loaded) {
+          // Match the local video's object-fit: cover without stretching text.
+          const width = remoteCanvasElement.width;
+          const height = remoteCanvasElement.height;
+          const ratio = Math.max(width / frameImage.naturalWidth, height / frameImage.naturalHeight);
+          const drawWidth = frameImage.naturalWidth * ratio;
+          const drawHeight = frameImage.naturalHeight * ratio;
+          remoteCanvasContext.clearRect(0, 0, width, height);
+          remoteCanvasContext.drawImage(frameImage, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+          remoteStatusState.baseText = 'Remote Feed - Connected';
+          const recovered = remoteStatusState.state !== 'connected';
+          remoteStatusState.state = 'connected';
+          remoteStatusState.latencyMs = Number.isFinite(payload.server_ts_ms)
+            ? Date.now() - payload.server_ts_ms : null;
+          // The badge is an aria-live region: do not update it for every frame.
+          if (recovered || performance.now() - lastStatusUpdate >= 1000) {
+            renderRemoteStatus();
+            lastStatusUpdate = performance.now();
+          }
+        } else {
+          remoteStatusState.baseText = 'Remote Feed - Unable to decode frame';
+          remoteStatusState.state = 'error';
+          remoteStatusState.latencyMs = null;
+          renderRemoteStatus();
+        }
+      } finally {
+        URL.revokeObjectURL(frameUrl);
+        activeFrameUrl = null;
+        const nextFrame = pendingFrame;
+        pendingFrame = null;
+        if (nextFrame && !stopped) decodeFrame(nextFrame);
+      }
+    };
+    frameImage.onload = () => finishFrame(true);
+    frameImage.onerror = () => finishFrame(false);
+    frameImage.src = frameUrl;
+  }
+
+  _remoteStreamCleanup = () => {
+    stopped = true;
+    window.removeEventListener('resize', resizeRemoteCanvas);
+    socket.removeAllListeners();
+    clearFrames();
+    socket.disconnect();
+  };
+
   socket.on('connect', () => {
     // Clear any stale frame from a previous session before live frames arrive.
-    remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
-    if (_prevFrameUrl) { URL.revokeObjectURL(_prevFrameUrl); _prevFrameUrl = null; }
+    clearFrames();
     remoteStatusState.baseText = 'Remote Feed - Connected';
     remoteStatusState.state = 'connected';
     remoteStatusState.latencyMs = null;
@@ -319,7 +392,16 @@ function initializeRemoteSocketStream() {
   });
 
   socket.on('disconnect', () => {
+    clearFrames();
     remoteStatusState.baseText = 'Remote Feed - Reconnecting...';
+    remoteStatusState.state = 'error';
+    remoteStatusState.latencyMs = null;
+    renderRemoteStatus();
+  });
+
+  socket.on('connect_error', () => {
+    clearFrames();
+    remoteStatusState.baseText = 'Remote Feed - Connection failed; retrying...';
     remoteStatusState.state = 'error';
     remoteStatusState.latencyMs = null;
     renderRemoteStatus();
@@ -327,6 +409,7 @@ function initializeRemoteSocketStream() {
 
   socket.on('stream_status', (payload) => {
     if (payload?.state === 'error') {
+      clearFrames();
       remoteStatusState.baseText = `Remote Feed - ${payload.message || 'Camera unavailable'}`;
       remoteStatusState.state = 'error';
       remoteStatusState.latencyMs = null;
@@ -335,33 +418,17 @@ function initializeRemoteSocketStream() {
   });
 
   socket.on('frame', (payload) => {
-    if (typeof payload?.server_ts_ms === 'number') {
-      remoteStatusState.baseText = 'Remote Feed - Connected';
-      remoteStatusState.state = 'connected';
-      remoteStatusState.latencyMs = Date.now() - payload.server_ts_ms;
-      renderRemoteStatus();
-    }
-
-    frameImage.onload = () => {
-      remoteCanvasContext.clearRect(0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
-      remoteCanvasContext.drawImage(frameImage, 0, 0, remoteCanvasElement.width, remoteCanvasElement.height);
-      if (_prevFrameUrl) {
-        URL.revokeObjectURL(_prevFrameUrl);
-        _prevFrameUrl = null;
-      }
-    };
-    const frameBlob = new Blob([payload.data], { type: 'image/jpeg' });
-    const frameUrl = URL.createObjectURL(frameBlob);
-    _prevFrameUrl = frameUrl;
-    frameImage.src = frameUrl;
+    if (stopped || !payload?.data) return;
+    // Finish the current decode and keep only the newest waiting frame.
+    if (activeFrameUrl) pendingFrame = payload;
+    else decodeFrame(payload);
   });
 }
 
 function stopRemoteSocketStream() {
-  if (window.remoteStreamSocket && typeof window.remoteStreamSocket.disconnect === 'function') {
-    window.remoteStreamSocket.disconnect();
-    window.remoteStreamSocket = null;
-  }
+  _remoteStreamCleanup?.();
+  _remoteStreamCleanup = null;
+  window.remoteStreamSocket = null;
 }
 
 function stopLocalCameraStream() {
@@ -372,11 +439,16 @@ function stopLocalCameraStream() {
 }
 
 function cleanupViewerResources() {
+  _viewerActive = false;
+  _cameraRequestId++;
+  if (_panRafId !== null) cancelAnimationFrame(_panRafId);
+  _panRafId = null;
+  _pendingPanDx = _pendingPanDy = 0;
+  isDragging = _pinching = false;
   stopLocalCameraStream();
   stopRemoteSocketStream();
 }
 
-/* Camera is started once in the async IIFE below; no duplicate DOMContentLoaded start here. */
 /* ---------- end camera / 1080p helpers ---------- */
 
 
@@ -443,7 +515,8 @@ videoContainer.addEventListener('touchmove', (e) => {
             e.touches[0].clientY - e.touches[1].clientY,
         );
         const minZ = parseFloat(zoomSlider?.min) || 1;
-        const maxZ = parseFloat(zoomSlider?.max) || 5;
+        const maxZ = parseFloat(zoomSlider?.max) || 20;
+        if (_pinchStartDist <= 0) return;
         const newZ = Math.round(
             Math.max(minZ, Math.min(maxZ, _pinchStartZoom * (dist / _pinchStartDist))) * 10
         ) / 10;
@@ -470,7 +543,17 @@ videoContainer.addEventListener('touchmove', (e) => {
 videoContainer.addEventListener('touchend', (e) => {
     if (e.target?.closest?.('input[type="range"]')) return;
     if (e.touches.length < 2)  _pinching  = false;
-    if (e.touches.length === 0) isDragging = false;
+    if (e.touches.length === 1) {
+        isDragging = true;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+    } else if (e.touches.length === 0) {
+        isDragging = false;
+    }
+});
+
+videoContainer.addEventListener('touchcancel', () => {
+    isDragging = _pinching = false;
 });
 
 // Constrain movement within bounds
@@ -481,8 +564,8 @@ function constrainMovement() {
     const videoHeight = viewerElement.offsetHeight * scale;
 
     // Determine the max translations to keep the video within bounds
-    const maxTranslateX = (videoWidth - containerWidth) / 2;
-    const maxTranslateY = (videoHeight - containerHeight) / 2;
+    const maxTranslateX = Math.max(0, (videoWidth - containerWidth) / 2);
+    const maxTranslateY = Math.max(0, (videoHeight - containerHeight) / 2);
 
     // Constrain translateX and translateY within the calculated boundaries
     translateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, translateX));
@@ -501,6 +584,9 @@ function updateCenterButtonVisibility() {
 }
 
 function centerView() {
+    if (_panRafId !== null) cancelAnimationFrame(_panRafId);
+    _panRafId = null;
+    _pendingPanDx = _pendingPanDy = 0;
     translateX = 0;
     translateY = 0;
     applyTransform();
@@ -517,6 +603,7 @@ function applyTransform() {
 
 // Zoom using the vertical slider; update aria for screen readers
 function adjustZoom() {
+    if (!zoomSlider) return;
     scale = parseFloat(zoomSlider.value);
     applyTransform();
     const resetBtn = document.getElementById('reset-btn');
@@ -527,7 +614,6 @@ function adjustZoom() {
             resetBtn.style.display = 'none';
         }
     }
-    updateCenterButtonVisibility();
     if (zoomSlider) {
         zoomSlider.setAttribute('aria-valuenow', String(scale));
         zoomSlider.setAttribute('aria-valuetext', `Zoom ${scale.toFixed(1)}x`);
@@ -539,11 +625,10 @@ function adjustZoom() {
 
 // Change zoom via + / - buttons by delta (e.g., 0.1)
 function changeZoom(delta) {
-    const resetBtn = document.getElementById('reset-btn');
     if (!zoomSlider) return;
 
     const min = parseFloat(zoomSlider.min) || 1;
-    const max = parseFloat(zoomSlider.max) || 5;
+    const max = parseFloat(zoomSlider.max) || 20;
     const step = parseFloat(zoomSlider.step) || 0.1;
 
     let newZoom = parseFloat(zoomSlider.value) + delta;
@@ -557,22 +642,7 @@ function changeZoom(delta) {
     newZoom = Math.max(min, Math.min(max, newZoom));
 
     zoomSlider.value = newZoom;
-    // call your existing adjustZoom to apply the change
-    if (typeof adjustZoom === 'function') {
-        adjustZoom();
-    } else {
-        // fallback: trigger change event
-        zoomSlider.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    if (resetBtn) {
-        if (newZoom > 1.01) {
-        resetBtn.style.display = 'inline-block';
-        } else {
-        resetBtn.style.display = 'none';
-        }
-    }
-    updateCenterButtonVisibility();
+    adjustZoom();
 }
 
 // Combine Predefined and Adjustable Custom Filters
@@ -585,21 +655,22 @@ function applyCombinedFilters() {
 
 // Adjustable Custom Filters
 function applyCustomFilter() {
-    customFilters.hue        = document.getElementById('hue').value;
-    customFilters.brightness = document.getElementById('brightness').value;
-    customFilters.contrast   = document.getElementById('contrast').value;
-    customFilters.saturation = document.getElementById('saturation').value;
+    Object.keys(DEFAULT_CUSTOM_FILTERS).forEach((key) => {
+        const input = document.getElementById(key);
+        if (input) customFilters[key] = Number(input.value);
+    });
     applyCombinedFilters();
-    // B — keep aria-valuetext in sync for screen readers
-    const hueEl        = document.getElementById('hue');
-    const brightnessEl = document.getElementById('brightness');
-    const contrastEl   = document.getElementById('contrast');
-    const saturationEl = document.getElementById('saturation');
-    if (hueEl)        hueEl.setAttribute('aria-valuetext',        `${customFilters.hue}\u00b0`);
-    if (brightnessEl) brightnessEl.setAttribute('aria-valuetext', `${customFilters.brightness}%`);
-    if (contrastEl)   contrastEl.setAttribute('aria-valuetext',   `${customFilters.contrast}%`);
-    if (saturationEl) saturationEl.setAttribute('aria-valuetext', `${customFilters.saturation}%`);
+    syncCustomFilterInputs();
     _saveSettings();
+}
+
+function syncCustomFilterInputs() {
+    Object.keys(DEFAULT_CUSTOM_FILTERS).forEach((key) => {
+        const input = document.getElementById(key);
+        if (!input) return;
+        input.value = customFilters[key];
+        input.setAttribute('aria-valuetext', `${customFilters[key]}${key === 'hue' ? '°' : '%'}`);
+    });
 }
 
 // Predefined Filters
@@ -608,35 +679,27 @@ function applyFilter(filter) {
     applyCombinedFilters();
 }
 
-(async () => {
+async function initializeViewer() {
     if (isRemoteCanvasMode) {
         applyTransform();
         initializeRemoteSocketStream();
         return;
     }
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('getUserMedia is not supported in this browser');
-        return;
-    }
-
     try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+            throw new Error('Camera access requires a supported browser and HTTPS or localhost');
+        }
         // startCamera will set videoElement.srcObject and wait for loadedmetadata
-        await startCamera(videoElement, { preferExact1080: false });
+        const stream = await startCamera(videoElement, { preferExact1080: false });
 
-        // Guard: if the element was removed while the async camera start was in progress, bail out.
-        if (!document.body.contains(videoElement)) return;
-
-        // Stop camera when leaving the page (e.g. Back button) so the camera LED turns off
-        // Optional: after camera starts, align any overlay / processing canvases to the native video pixels
-        const overlayIds = ['overlay-canvas', 'tritanopia-overlay-canvas'];
-        overlayIds.forEach(id => {
-            const c = document.getElementById(id);
-            if (c instanceof HTMLCanvasElement) setCanvasToVideoSize(c, videoElement, 1.0);
-        });
+        if (!stream || !_viewerActive || !document.body.contains(videoElement)) return;
+        videoContainer.querySelector('.camera-error')?.remove();
+        applyTransform();
 
         console.log('Camera stream active. Negotiated resolution (videoElement):', videoElement.videoWidth, 'x', videoElement.videoHeight);
     } catch (err) {
+        if (!_viewerActive) return;
         console.error('Camera startup failed:', err);
 
         const isPermissionDenied = err?.name === 'NotAllowedError';
@@ -653,6 +716,7 @@ function applyFilter(filter) {
             : 'The camera could not be started. Try reloading the page.';
 
         if (videoContainer) {
+            videoContainer.querySelector('.camera-error')?.remove();
             const errCard = document.createElement('div');
             errCard.className = 'camera-error';
             const h2 = document.createElement('h2');
@@ -667,44 +731,16 @@ function applyFilter(filter) {
             videoContainer.appendChild(errCard);
         }
     }
-})();
-
-function resetFilterSliders() {
-    // Default values (must match the defaults used when page first loads)
-    const defaultHue = 0;
-    const defaultBrightness = 100;
-    const defaultContrast = 100;
-    const defaultSaturation = 100;
-
-    // Update the DOM slider inputs if they exist
-    const hueEl = document.getElementById('hue');
-    const brightnessEl = document.getElementById('brightness');
-    const contrastEl = document.getElementById('contrast');
-    const saturationEl = document.getElementById('saturation');
-
-    if (hueEl) hueEl.value = defaultHue;
-    if (brightnessEl) brightnessEl.value = defaultBrightness;
-    if (contrastEl) contrastEl.value = defaultContrast;
-    if (saturationEl) saturationEl.value = defaultSaturation;
-
-    // Update the in-memory customFilters object so code uses the new values
-    if (typeof customFilters === 'object') {
-        customFilters.hue = defaultHue;
-        customFilters.brightness = defaultBrightness;
-        customFilters.contrast = defaultContrast;
-        customFilters.saturation = defaultSaturation;
-    }
-
-    // Apply the combined filters (this will apply 'none' for predefined filter and the adjusted sliders)
-    applyCombinedFilters();
-
-    // If you have any UI that depends on slider change events (labels, preview, etc.), optionally dispatch 'input' events:
-    [hueEl, brightnessEl, contrastEl, saturationEl].forEach(el => {
-        if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 }
 
-// Replace your applyNormal function with this (or update its body to call resetFilterSliders)
+void initializeViewer();
+
+function resetFilterSliders() {
+    Object.assign(customFilters, DEFAULT_CUSTOM_FILTERS);
+    syncCustomFilterInputs();
+    applyCombinedFilters();
+}
+
 function applyNormal() {
     // Set predefined filter to 'none'
     applyFilter('none');
@@ -763,25 +799,25 @@ function isFilterMenuOpen() {
     return !!menu?.classList.contains('active');
 }
 
-function setFilterMenuPosition() {
-    // Position is handled entirely by CSS (fixed top:80px left:50% translateX(-50%)).
-    // Nothing to override here.
-}
-
 function showFilterMenu() {
     if (!menu) return;
     hideMaskControls();
-    setFilterMenuPosition();
     menu.classList.add('active');
     const filterButton = document.getElementById('filter-button');
-    if (filterButton) filterButton.classList.add('active');
+    if (filterButton) {
+        filterButton.classList.add('active');
+        filterButton.setAttribute('aria-expanded', 'true');
+    }
 }
 
 function hideFilterMenu() {
     if (!menu) return;
     menu.classList.remove('active');
     const filterButton = document.getElementById('filter-button');
-    if (filterButton) filterButton.classList.remove('active');
+    if (filterButton) {
+        filterButton.classList.remove('active');
+        filterButton.setAttribute('aria-expanded', 'false');
+    }
 }
 
 function toggleFilterMenu() {
@@ -806,19 +842,19 @@ function showMaskControls() {
     const controls = document.getElementById('mask-controls');
     if (controls) controls.style.display = 'flex';
     const btn = document.getElementById('mask-btn');
-    if (btn) btn.classList.add('active'), btn.setAttribute('aria-pressed', 'true');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
 }
 
 function hideMaskControls() {
     const controls = document.getElementById('mask-controls');
     if (controls) controls.style.display = 'none';
     const btn = document.getElementById('mask-btn');
-    if (btn) btn.classList.remove('active'), btn.setAttribute('aria-pressed', 'false');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
 function toggleMaskControls() {
     if (isMaskControlsOpen()) {
-        hideMaskControls();
+        disableBarsMask();
     } else {
         showMaskControls();
     }
@@ -842,24 +878,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!slider || !resetBtn) return;
 
-    // Show / hide Reset Zoom button depending on zoom level
-    function updateResetButtonVisibility() {
-        const val = parseFloat(slider.value) || 1;
-        if (val > 1.01) {
-            resetBtn.style.display = 'inline-block';
-        } else {
-            resetBtn.style.display = 'none';
-        }
-        updateCenterButtonVisibility();
-    }
-
-    // Hook into existing slider behaviour (zoom + reset button visibility + aria)
-    function onZoomInput() {
-        adjustZoom();
-        updateResetButtonVisibility();
-    }
-    slider.addEventListener('input', onZoomInput);
-    slider.addEventListener('change', onZoomInput);
+    slider.addEventListener('input', adjustZoom);
+    slider.addEventListener('change', adjustZoom);
 
     // Button listeners (no inline handlers)
     document.getElementById('back-btn')?.addEventListener('click', goHome);
@@ -871,25 +891,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('zoom-out')?.addEventListener('click', () => changeZoom(-0.1));
 
     // Filter buttons by data-filter
-    const filterMap = {
-        'normal': applyNormal,
-        'protanopia': applyProtanopia,
-        'deuteranopia': applyDeuteranopia,
-        'tritanopia': applyTritanopia,
-        'grayscale': applyGrayscale,
-        'inverted': applyInverted,
-        'inverted-grayscale': applyInvertedGrayscale,
-        'blue-on-yellow': applyBlueOnYellow,
-        'orange-on-black': applyNeonOrangeOnBlack,
-        'green-on-black': applyNeonGreenOnBlack,
-        'yellow-on-black': applyYellowOnBlack,
-        'purple-on-black': applyPurpleOnBlack
-    };
     document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
         const key = btn.dataset.filter;
-        const fn = filterMap[key];
-        if (fn) btn.addEventListener('click', () => {
-            fn();
+        if (Object.hasOwn(FILTER_ACTIONS, key)) btn.addEventListener('click', () => {
+            FILTER_ACTIONS[key]();
             _setActiveFilterBtn(key);
             _saveSettings();
         });
@@ -903,29 +908,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Actual Reset Zoom function
     window.resetZoom = function () {
-        scale = 1;
-        translateX = 0;
-        translateY = 0;
+        centerView();
         slider.value = '1';
-        applyTransform();
-        resetBtn.style.display = 'none';
-        updateCenterButtonVisibility();
-        if (slider) {
-            slider.setAttribute('aria-valuenow', '1');
-            slider.setAttribute('aria-valuetext', 'Zoom 1x');
-        }
+        adjustZoom();
     };
 
     // Initialize button state and zoom aria on page load
-    updateResetButtonVisibility();
     adjustZoom();
-
-    // Persist save on resetZoom too
-    const _origResetZoom = window.resetZoom;
-    window.resetZoom = function () {
-        _origResetZoom();
-        _saveSettings();
-    };
 });
 
 // Back button function
@@ -936,10 +925,12 @@ function goHome() {
 
 window.addEventListener('pagehide', cleanupViewerResources);
 window.addEventListener('beforeunload', cleanupViewerResources);
-/* ---------- Robust letterbox mask (top + bottom bars) feature ----------
-   Drop this whole block into samples.js after videoElement / video-container are defined.
-   It will create missing UI if needed and ensures the mask canvas is inserted under UI.
---------------------------------------------------------------------- */
+window.addEventListener('pageshow', (event) => {
+  if (!event.persisted) return;
+  _viewerActive = true;
+  void initializeViewer();
+});
+/* ---------- Reading mask: horizontal or vertical bars ---------- */
 
 const _barsMaskState = {
   enabled: false,
@@ -1040,8 +1031,7 @@ function _ensureMaskUIExists() {
   }
 }
 
-// Robust createBarsMaskCanvas() that forces siblings to be above the mask.
-// Replace your previous version with this.
+// Keep the reading mask above the feed and below interactive controls.
 function createBarsMaskCanvas() {
   if (_barsMaskState.canvas) return;
 
@@ -1214,6 +1204,7 @@ function enableBarsMask() {
   _ensureMaskUIExists();
   createBarsMaskCanvas();
   _barsMaskState.enabled = true;
+  updateMaskButton();
   drawBarsMask();
   updateMaskOrientationButton();
   updateMaskInvertButton();
@@ -1232,6 +1223,7 @@ function disableBarsMask() {
   _barsMaskState.canvas = null;
   _barsMaskState.ctx = null;
   _barsMaskState.enabled = false;
+  updateMaskButton();
   hideMaskControls();
   _saveSettings();
 }
@@ -1247,6 +1239,7 @@ function resetMaskSettings() {
   updateMaskOrientationButton();
   updateMaskInvertButton();
   disableBarsMask();
+  _saveSettings();
 }
 
 function resetTutorialViewerState() {
@@ -1259,6 +1252,14 @@ function updateMaskInvertButton() {
   const btn = document.getElementById('mask-invert-btn');
   if (!btn) return;
   btn.classList.toggle('active', _barsMaskState.inverted);
+  btn.setAttribute('aria-pressed', String(_barsMaskState.inverted));
+}
+
+function updateMaskButton() {
+  const button = document.getElementById('mask-btn');
+  if (!button) return;
+  button.classList.toggle('active', _barsMaskState.enabled);
+  button.setAttribute('aria-pressed', String(_barsMaskState.enabled));
 }
 
 // Setup on DOM ready (safe to call multiple times)
@@ -1270,7 +1271,7 @@ function setupBarsMaskFeature() {
     if (radiusEl) {
       radiusEl.min = '0';
       radiusEl.max = '48';
-      radiusEl.value = String(_barsMaskState.barPct || 5);
+      radiusEl.value = String(_barsMaskState.barPct);
     }
   } catch (err) {
     console.warn('setupBarsMaskFeature error', err);
@@ -1308,6 +1309,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!document.querySelector('.filter-btn.active')) {
     _setActiveFilterBtn('normal');
   }
+  updateMaskButton();
+  updateMaskOrientationButton();
+  updateMaskInvertButton();
+  _settingsReady = true;
+  _saveSettings();
   wireTouchFriendlyRangeInput(document.getElementById('zoom-slider'));
 
   let overlay, box, textEl, highlight;
@@ -1336,16 +1342,9 @@ document.addEventListener('DOMContentLoaded', () => {
       before: () => showFilterMenu()
     },
     {
-      // Fix 2: target changed from ".custom-slider-col" to null so renderStep does not
-      // overwrite the multi-element highlight that before() sets via highlightMultiple.
       text: "These sliders adjust brightness and contrast.",
-      target: null,
-      before: () => {
-        showFilterMenu();
-        requestAnimationFrame(() => {
-          highlightMultiple([".custom-slider-col"]);
-        });
-      }
+      target: ".adjustment-grid",
+      before: () => showFilterMenu()
     },
     {
       text: "This is the Mask button. It hides parts of the screen.",
@@ -1444,38 +1443,6 @@ document.addEventListener('DOMContentLoaded', () => {
     finishBtn.classList.toggle('tutorial-hidden', !isLastStep);
   }
 
-  function highlightMultiple(selectors) {
-    const highlight = document.querySelector(".tutorial-highlight");
-    if (!highlight) return;
-
-    const elements = selectors
-      .map(sel => Array.from(document.querySelectorAll(sel)))
-      .flat()
-      .filter(el => el && el.getBoundingClientRect);
-
-    if (elements.length === 0) {
-      highlight.style.display = "none";
-      return;
-    }
-
-    // Compute combined bounding box
-    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-
-    elements.forEach(el => {
-      const r = el.getBoundingClientRect();
-      left = Math.min(left, r.left);
-      top = Math.min(top, r.top);
-      right = Math.max(right, r.right);
-      bottom = Math.max(bottom, r.bottom);
-    });
-
-    highlight.style.display = "block";
-    highlight.style.left = `${left - 12}px`;
-    highlight.style.top = `${top - 12}px`;
-    highlight.style.width = `${right - left + 24}px`;
-    highlight.style.height = `${bottom - top + 24}px`;
-  }
-
   function renderStep() {
     const step = steps[stepIndex];
     if (!step) return;
@@ -1492,6 +1459,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     requestAnimationFrame(() => {
+      if (!highlight || steps[stepIndex] !== step) return;
       const el = document.querySelector(step.target);
       if (!el) {
         highlight.style.display = "none";
@@ -1529,7 +1497,8 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('keydown', (e) => {
   // Do not fire shortcuts when focus is inside a text input or slider
   const tag = (e.target?.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'textarea') return;
+  if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable
+      || e.ctrlKey || e.metaKey || e.altKey || isTutorialOpen()) return;
 
   switch (e.key) {
     case '+':

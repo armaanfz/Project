@@ -1,0 +1,47 @@
+<dialog id="reader-dialog" class="reader-panel" aria-labelledby="reader-title">
+    <header class="reader-header">
+        <div>
+            <p class="menu-section-title">Magnifier</p>
+            <h1 id="reader-title">Read Text</h1>
+        </div>
+        <button type="button" class="btn" id="reader-close" autofocus>Back to Camera</button>
+    </header>
+
+    <div class="reader-settings" id="reader-settings" hidden>
+        <div class="reader-size" role="group" aria-label="Text size">
+            <button type="button" class="btn" id="reader-smaller" aria-label="Decrease text size">A−</button>
+            <output id="reader-size-label" aria-live="polite">32 px</output>
+            <button type="button" class="btn" id="reader-larger" aria-label="Increase text size">A+</button>
+        </div>
+        <label class="reader-field" for="reader-colors">Colors
+            <select id="reader-colors">
+                <option value="dark">White on black</option>
+                <option value="light">Black on white</option>
+                <option value="yellow">Yellow on black</option>
+                <option value="blue">Blue on yellow</option>
+            </select>
+        </label>
+        <label class="reader-field" for="reader-speed">Reading speed
+            <select id="reader-speed">
+                <option value="0.75">Slower</option>
+                <option value="1" selected>Normal</option>
+                <option value="1.25">Faster</option>
+                <option value="1.5">Fastest</option>
+            </select>
+        </label>
+    </div>
+
+    <div class="reader-body" id="reader-body">
+        <p id="reader-status" class="reader-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <img id="reader-preview" class="reader-preview" alt="Captured page" hidden>
+        <p id="reader-notice" class="reader-notice" hidden></p>
+        <article id="reader-text" class="reader-text" tabindex="0" aria-label="Recognized text" hidden></article>
+    </div>
+
+    <footer class="reader-actions" id="reader-actions" hidden>
+        <button type="button" class="btn reader-primary" id="reader-speak" disabled>Read Aloud</button>
+        <button type="button" class="btn" id="reader-pause" hidden>Pause</button>
+        <button type="button" class="btn" id="reader-stop" hidden>Stop</button>
+        <button type="button" class="btn" id="reader-rescan">Scan Again</button>
+    </footer>
+</dialog>

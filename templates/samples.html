@@ -71,6 +71,8 @@
         <div class="ctrl-divider" aria-hidden="true"></div>
         <button class="ctrl-btn" id="mask-btn" aria-pressed="false" aria-expanded="false" aria-controls="mask-controls" aria-label="Toggle reading mask">Mask</button>
         <div class="ctrl-divider" aria-hidden="true"></div>
+        <button class="ctrl-btn" id="read-text-btn" aria-haspopup="dialog" aria-controls="reader-dialog" title="Read text in the visible camera area (R)">Read Text</button>
+        <div class="ctrl-divider" aria-hidden="true"></div>
         <button class="ctrl-btn" id="center-btn" aria-label="Center the view" style="display:none;">Center</button>
         <button class="ctrl-btn" id="reset-btn" aria-label="Reset zoom to default" style="display:none;">Reset Zoom</button>
     </section>
@@ -138,7 +140,9 @@
         <span class="zoom-label" aria-hidden="true">1×</span>
     </div>
 
+    {% include 'reader.html' %}
     <script defer src="{{ url_for('static', filename='js/samples.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/reader.js') }}"></script>
 </body>
 
 </html>

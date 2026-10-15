@@ -18,6 +18,7 @@ import cv2
 import qrcode
 from flask import Flask, render_template, request, send_file
 from flask_socketio import SocketIO
+from reader import reader_api
 
 
 def _default_socketio_async_mode():
@@ -158,6 +159,8 @@ def _stop_tunnel():
 
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 7 * 1024 * 1024
+app.register_blueprint(reader_api)
 socketio = SocketIO(
     app,
     async_mode=_default_socketio_async_mode(),

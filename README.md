@@ -38,6 +38,9 @@ PowerShell, use `$env:DISABLE_TUNNEL='1'` and then `python app.py`.
 | `static/js/samples.js` | Shared viewer controls, saved settings, local camera startup, remote frame decoding, reading mask, and tutorial. |
 | `static/css/styles.css` | Home page styling and theme variables. |
 | `static/css/samples.css` | Viewer layout, controls, mask, tutorial, and accessibility styles. |
+| `templates/reader.html`, `static/js/reader.js` | Shared accessible Read Text dialog and Piper audio playback. |
+| `reader.py`, `reader_worker.py` | OCR/speech jobs, isolated processing, cancellation, and cleanup. |
+| `scripts/setup_reader.py` | Voice download with registry checksum validation. |
 | `static/images/magnifier.png` | Home background and site icon. |
 | `magnifier-stream.service` | Single systemd service for `app.py` on port 5000. |
 | `tests/test_app.py` | Routes, shutdown restrictions, configuration, and tunnel lifecycle tests. |
@@ -75,9 +78,100 @@ cannot open the same device for `/samples` and `/remote` simultaneously. Use
   again while its panel is open turns the mask off. Clicking elsewhere or
   opening Filters closes the panel while keeping the mask enabled.
 - Keyboard shortcuts: `+` / `-` zoom, `0` reset, `F` filters, `M` mask, and
-  `Escape` close panels. Shortcuts leave text inputs and browser shortcuts alone.
+  `R` Read Text. `Escape` closes panels or returns from the reader. Camera
+  shortcuts pause while the reader or tutorial is open.
 - Zoom, filters, adjustments, and mask preferences persist in local storage for
   the current browser/origin. A new tunnel URL has a separate set of preferences.
+
+## Read Text and Read Aloud
+
+Read Text scans the visible camera area once, then opens a full-screen reading
+view. The snapshot follows zoom and pan and uses original camera pixels before
+display color filters and the mask. It does not open another camera. Both local
+and remote viewers use the same capture and reader controls.
+
+The reading view offers text size, four contrast combinations, and Read Aloud
+with Pause, Resume, Stop, and playback speed. Text wraps to fit the screen.
+Scan Again returns to the camera so the next page can be positioned before
+tapping Read Text. Back to Camera preserves the existing magnifier settings.
+Reader appearance and speed are saved separately; scanned text is not saved
+to browser storage. Escape closes the dialog and restores focus to Read Text.
+
+Speech uses **Piper's local neural voice**, defaulting to `en_US-lessac-medium`.
+The browser plays the generated WAV recording; it never uses browser speech
+synthesis and there is no fallback to browser voices. Model loading and speech
+generation run on the machine hosting Flask (the Pi in deployment). Preparing
+a recording takes time; the UI shows progress and lets the user stop.
+
+### One-time setup on Raspberry Pi OS
+
+Use a 64-bit Pi OS and a supported Python version with available Piper/ONNX
+Runtime wheels. Activate the same virtual environment used by the app/service:
+
+```sh
+sudo apt install tesseract-ocr tesseract-ocr-eng
+python -m pip install -r requirements-reader.txt
+python scripts/setup_reader.py
+```
+
+Setup downloads the default voice and configuration to `models/`, checks their
+sizes and checksums against the upstream voice registry, and retains the model
+card. Restart the app/service afterward. Voice files are excluded from Git.
+Downloads require Internet access; the installed English OCR and voice engines
+run locally without an external OCR/TTS API or API key. ONNX Runtime telemetry
+is disabled before inference. Existing remote viewing still uses the tunnel
+and the viewer's existing Socket.IO dependency.
+
+On Windows, install the Tesseract executable separately and add it to PATH
+(or set `TESSERACT_CMD` to its full path), then run the same Python commands.
+For a different Piper voice, run `python scripts/setup_reader.py --voice CODE`
+and set `PIPER_MODEL` to the resulting `.onnx` file. Its `.onnx.json` file must
+remain next to it. Configure these environment variables in the systemd service
+when using automatic startup; shell settings alone do not reach that service.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `PIPER_MODEL` | `models/en_US-lessac-medium.onnx` relative to the app directory | Local neural voice model. |
+| `TESSERACT_CMD` | `tesseract` on PATH | Tesseract executable. |
+| `OCR_LANGUAGE` | `eng` | Installed Tesseract language packs, e.g. `eng+spa`. Use a matching speech voice for other languages. |
+
+If dependencies are missing, the viewer remains usable and the reader shows a
+setup/unavailable message. `GET /api/reader/status` reports installed components
+and model files; it does not prove camera accuracy or voice quality on the Pi.
+
+### Processing and limits
+
+`POST /api/ocr` accepts a PNG/JPEG snapshot. `POST /api/reader/speech` accepts
+recognized text. Each returns an unguessable job ID immediately; the UI polls
+`GET /api/reader/jobs/<id>`, downloads completed speech from its `/audio` URL,
+and deletes jobs with `DELETE /api/reader/jobs/<id>`. IDs are bearer tokens:
+results are never broadcast to other viewers. Mutations require the custom
+`X-Magnifier-Reader: 1` header; no cross-origin API access is enabled.
+
+One OCR or speech job runs at a time across viewers; extra requests receive a
+busy message instead of building up a queue. Native worker processes keep the
+web/Socket.IO loop responsive, and inference uses one CPU thread. Cancellation
+stops the worker and its Tesseract child. OCR has a 45-second outer deadline
+(30 seconds for Tesseract); speech has a 120-second deadline. Uploads are capped
+at 6 MiB / 12 megapixels, recognized text at 20,000 characters, speech input at
+8,000 characters, and generated audio at 24 MiB. Long text is explicitly flagged
+or rejected rather than silently reading only part of a page.
+
+Temporary input images/text and generated files are deleted after the worker
+finishes. Completed results/audio live in memory for at most five minutes, up
+to four results, and the UI deletes them after receiving them. Closing the
+reader stops audio and releases browser image/audio URLs. A disconnected client
+cannot leave work running beyond the deadline. Camera ownership and streaming
+remain independent of reader jobs.
+
+Start validation with clear printed English worksheets. Blurred or tilted pages,
+handwriting, equations, and multiple columns need testing against the originals.
+The uncertainty message is a cue to check words, not an accuracy guarantee.
+
+Third-party components: [Tesseract](https://github.com/tesseract-ocr/tesseract)
+(Apache-2.0), [Piper](https://github.com/OHF-Voice/piper1-gpl) (GPL-3.0), and the
+[Lessac voice model card](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD).
+Keep the applicable software and voice-model notices with a distributed device.
 
 ## Configuration
 
@@ -104,7 +198,7 @@ Backend tests require neither a camera nor Cloudflare:
 
 ```sh
 pip install -r requirements-dev.txt
-python -m pytest tests/test_app.py tests/test_stream.py -q
+python -m pytest tests/test_app.py tests/test_stream.py tests/test_reader.py -q
 ```
 
 For the full suite, including browser tests:
@@ -119,6 +213,13 @@ Browser tests start a local test server, use a synthetic camera, and simulate
 Socket.IO frame delivery. They cover actual JPEG decoding as well as controlled
 slow decoding and disconnects. The browser module is skipped when Playwright
 is not installed.
+
+Reader browser tests cover both camera sources, the exact zoom/pan crop,
+unfiltered snapshots, plain-text rendering, cancellation, neural-audio playback
+controls, and layouts at 1280×720, 800×480, and 390×600. Engine integration tests
+run real Tesseract and Piper when installed, otherwise they are explicitly
+skipped. Install `requirements-reader.txt` and run the voice setup to enable
+those tests. No public tunnel is started by the suite.
 
 Before deploying, check the actual Pi camera, touchscreen/pinch interactions,
 Windows DirectShow if used, and a live Cloudflare connection. Automated tests

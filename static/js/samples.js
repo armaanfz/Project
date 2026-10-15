@@ -3,6 +3,7 @@ const remoteCanvasElement = document.getElementById('stream-canvas');
 const remoteCanvasContext = remoteCanvasElement?.getContext('2d') ?? null;
 const viewerElement = videoElement || remoteCanvasElement;
 const isRemoteCanvasMode = !videoElement && !!remoteCanvasElement;
+let readerRemoteFrame = null;
 
 // WeakSet used by _ensureMaskUIExists to track which mask buttons already have
 // their event listener attached, without polluting DOM element properties.
@@ -10,6 +11,13 @@ const _barsMaskHookedButtons = new WeakSet();
 const videoContainer = document.getElementById('video-container');
 const menu = document.getElementById('menu');
 const zoomSlider = document.getElementById('zoom-slider');
+
+// The toolbar can wrap on small screens; keep the mask sheet above every row.
+const viewerControls = document.getElementById('controls');
+const viewerControlsObserver = new ResizeObserver(() => {
+    document.documentElement.style.setProperty('--viewer-controls-height', `${viewerControls.getBoundingClientRect().height}px`);
+});
+if (viewerControls) viewerControlsObserver.observe(viewerControls);
 
 let scale = 1; // scale
 let translateX = 0; // X-axis translation
@@ -321,6 +329,7 @@ function initializeRemoteSocketStream() {
   }
 
   function clearFrames() {
+    readerRemoteFrame = null;
     pendingFrame = null;
     frameImage.onload = null;
     frameImage.onerror = null;
@@ -345,6 +354,8 @@ function initializeRemoteSocketStream() {
           const drawHeight = frameImage.naturalHeight * ratio;
           remoteCanvasContext.clearRect(0, 0, width, height);
           remoteCanvasContext.drawImage(frameImage, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+          // Retain only the last displayed JPEG, not a filtered/resized screenshot.
+          readerRemoteFrame = { data: payload.data, capturedAt: performance.now() };
           remoteStatusState.baseText = 'Remote Feed - Connected';
           const recovered = remoteStatusState.state !== 'connected';
           remoteStatusState.state = 'connected';
@@ -865,6 +876,49 @@ function closeAllPanels() {
     hideMaskControls();
 }
 
+// Shared OCR capture for the browser camera and Pi stream. The crop follows the
+// actual rendered transform (including an in-progress zoom animation).
+window.captureReaderImage = async function () {
+    let source = videoElement;
+    let bitmap = null;
+    if (isRemoteCanvasMode) {
+        const frame = readerRemoteFrame;
+        if (!frame || performance.now() - frame.capturedAt > 5000) {
+            throw new Error('Wait for the camera to connect, then scan again.');
+        }
+        bitmap = await createImageBitmap(new Blob([frame.data], { type: 'image/jpeg' }));
+        source = bitmap;
+    } else if (!videoElement || videoElement.readyState < 2) {
+        throw new Error('Wait for the camera to start, then scan again.');
+    }
+    try {
+        const sourceWidth = source.videoWidth || source.width;
+        const sourceHeight = source.videoHeight || source.height;
+        const rect = viewerElement.getBoundingClientRect();
+        const viewport = videoContainer.getBoundingClientRect();
+        const zoom = rect.width / viewerElement.clientWidth;
+        const cover = Math.max(viewerElement.clientWidth / sourceWidth, viewerElement.clientHeight / sourceHeight);
+        const ratio = cover * zoom;
+        const left = rect.left + (rect.width - sourceWidth * ratio) / 2;
+        const top = rect.top + (rect.height - sourceHeight * ratio) / 2;
+        const x = Math.max(0, (viewport.left - left) / ratio);
+        const y = Math.max(0, (viewport.top - top) / ratio);
+        const width = Math.min(sourceWidth, (viewport.right - left) / ratio) - x;
+        const height = Math.min(sourceHeight, (viewport.bottom - top) / ratio) - y;
+        if (!(width >= 16 && height >= 16)) throw new Error('Zoom out slightly, then scan again.');
+        const shrink = Math.min(1, 2400 / Math.max(width, height), Math.sqrt(4000000 / (width * height)));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(width * shrink));
+        canvas.height = Math.max(1, Math.round(height * shrink));
+        canvas.getContext('2d').drawImage(source, x, y, width, height, 0, 0, canvas.width, canvas.height);
+        return await new Promise((resolve, reject) => canvas.toBlob(
+            blob => blob ? resolve(blob) : reject(new Error('Could not capture the page. Please try again.')), 'image/png',
+        ));
+    } finally {
+        bitmap?.close();
+    }
+};
+
 function isTutorialOpen() {
     return !!document.querySelector('.tutorial-overlay');
 }
@@ -1365,6 +1419,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     },
     {
+      text: "Read Text scans the visible page. You can enlarge the words, change their colors, or listen with Read Aloud.",
+      target: "#read-text-btn",
+      before: () => closeAllPanels()
+    },
+    {
       text: "You're all set! You can explore anytime.",
       target: null
     }
@@ -1498,7 +1557,8 @@ document.addEventListener('keydown', (e) => {
   // Do not fire shortcuts when focus is inside a text input or slider
   const tag = (e.target?.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable
-      || e.ctrlKey || e.metaKey || e.altKey || isTutorialOpen()) return;
+      || e.ctrlKey || e.metaKey || e.altKey || isTutorialOpen()
+      || document.getElementById('reader-dialog')?.open) return;
 
   switch (e.key) {
     case '+':
@@ -1523,6 +1583,11 @@ document.addEventListener('keydown', (e) => {
     case 'M':
       e.preventDefault();
       if (typeof toggleMaskControls === 'function') toggleMaskControls();
+      break;
+    case 'r':
+    case 'R':
+      e.preventDefault();
+      document.getElementById('read-text-btn')?.click();
       break;
     case 'Escape':
       if (isFilterMenuOpen() || isMaskControlsOpen()) {

@@ -164,7 +164,7 @@
             ]);
             if (!current(token)) return;
             speechAvailable = capabilities.speech;
-            if (!capabilities.ocr) throw new Error('Text recognition has not been set up on this device yet.');
+            if (!capabilities.ocr) throw new Error("Text recognition is unavailable. The magnifier's installation needs updating.");
             previewURL = URL.createObjectURL(blob);
             preview.src = previewURL;
             preview.hidden = false;

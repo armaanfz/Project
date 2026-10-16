@@ -8,7 +8,6 @@ import logging
 import os
 from pathlib import Path
 import secrets
-import shutil
 import signal
 import subprocess
 import sys
@@ -18,6 +17,7 @@ import time
 
 from flask import Blueprint, jsonify, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
+from reader_worker import ocr_model_paths
 
 reader_api = Blueprint("reader", __name__, url_prefix="/api")
 ROOT = Path(__file__).resolve().parent
@@ -35,9 +35,10 @@ def voice_path():
 
 def availability():
     model = voice_path()
+    ocr_models = ocr_model_paths()
     return {
-        "ocr": bool(shutil.which(os.environ.get("TESSERACT_CMD", "tesseract")))
-               and importlib.util.find_spec("pytesseract") is not None,
+        "ocr": bool(ocr_models) and all(path.is_file() for path in ocr_models.values())
+               and importlib.util.find_spec("onnxruntime") is not None,
         "speech": importlib.util.find_spec("piper") is not None
                   and model.is_file() and Path(str(model) + ".json").is_file(),
     }
@@ -59,7 +60,7 @@ class Job:
 
 
 def terminate_process(process):
-    """Stop the worker and its Tesseract child on the Pi, including on cancellation."""
+    """Stop the worker process tree, including on cancellation."""
     if process.poll() is not None:
         return
     try:
@@ -238,7 +239,7 @@ def start_job(kind, payload):
 @reader_api.post("/ocr")
 def start_ocr():
     if not availability()["ocr"]:
-        return jsonify(error="Text recognition has not been set up on this device yet."), 503
+        return jsonify(error="Text recognition is unavailable. The magnifier's installation needs updating."), 503
     upload = request.files.get("image")
     if upload is None:
         return jsonify(error="No camera image was received. Please scan again."), 400

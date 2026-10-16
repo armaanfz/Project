@@ -184,6 +184,17 @@ def test_empty_scan_and_unavailable_voice_have_clear_states(page, viewer_server,
         assert "not available" in page.locator("#reader-notice").inner_text()
 
 
+def test_missing_ocr_explains_installation_update_and_returns_to_camera(page, viewer_server):
+    mock_reader(page)
+    page.route("**/api/reader/status", lambda route: route.fulfill(json={"ocr": False, "speech": True}))
+    ready_camera(page, viewer_server)
+    page.locator("#read-text-btn").click()
+    page.wait_for_function("document.getElementById('reader-status').textContent.includes('installation needs updating')")
+    assert page.locator("#reader-speak").is_disabled()
+    page.locator("#reader-close").click()
+    assert not page.locator("#reader-dialog").evaluate("dialog => dialog.open")
+
+
 @pytest.mark.parametrize("size", [(1280, 720), (800, 480), (390, 600)])
 def test_reader_layout_and_touch_controls_fit_screen(page, viewer_server, size):
     mock_reader(page)

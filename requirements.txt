@@ -4,3 +4,6 @@ opencv-python-headless>=4.8.0
 gevent>=23.0.0
 gevent-websocket>=0.10.1
 qrcode[pil]>=7.4.2
+# Includes the recognition models; no separate OCR executable or model download.
+rapidocr==3.10.0
+onnxruntime>=1.20,<2

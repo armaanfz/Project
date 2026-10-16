@@ -6,7 +6,7 @@ to the browser's device or a camera attached to the Raspberry Pi server.
 
 ## Run
 
-Use Python 3.10 or newer and a virtual environment:
+Use 64-bit Python 3.10 or newer (3.12 recommended) and a virtual environment:
 
 ```sh
 python -m venv venv
@@ -50,6 +50,7 @@ PowerShell, use `$env:DISABLE_TUNNEL='1'` and then `python app.py`.
 
 `requirements.txt` contains runtime dependencies, `requirements-dev.txt` adds
 pytest, and `requirements-browser.txt` adds optional Playwright browser tests.
+Text recognition and its models are included in the normal runtime installation.
 
 ### Two camera paths
 
@@ -97,19 +98,34 @@ tapping Read Text. Back to Camera preserves the existing magnifier settings.
 Reader appearance and speed are saved separately; scanned text is not saved
 to browser storage. Escape closes the dialog and restores focus to Read Text.
 
+Text recognition uses **RapidOCR with bundled PP-OCRv6 neural models**. Installing
+`requirements.txt` installs the OCR engine, CPU runtime, and recognition models.
+There is no Tesseract executable, PATH setting, language-pack installer, API key,
+or first-scan model download. Scans run locally on the machine hosting Flask.
+The bundled model supports printed English; no language selection is needed for
+English pages. Nearby lines reflow into paragraphs and low-confidence results
+retain the existing warning to check the original page.
+
 Speech uses **Piper's local neural voice**, defaulting to `en_US-lessac-medium`.
 The browser plays the generated WAV recording; it never uses browser speech
 synthesis and there is no fallback to browser voices. Model loading and speech
 generation run on the machine hosting Flask (the Pi in deployment). Preparing
 a recording takes time; the UI shows progress and lets the user stop.
 
-### One-time setup on Raspberry Pi OS
+### Install or update on Windows / Raspberry Pi OS
 
-Use a 64-bit Pi OS and a supported Python version with available Piper/ONNX
-Runtime wheels. Activate the same virtual environment used by the app/service:
+Activate the same virtual environment used to start `app.py` (or the Pi service).
+On the Pi, use a 64-bit OS. After pulling the updated `remote-feed` branch, install
+the dependencies and restart the app to enable **Read Text**:
 
 ```sh
-sudo apt install tesseract-ocr tesseract-ocr-eng
+python -m pip install -r requirements.txt
+```
+
+To enable **Read Aloud** as well, run these commands instead. They install the
+same OCR dependencies plus Piper and download its voice:
+
+```sh
 python -m pip install -r requirements-reader.txt
 python scripts/setup_reader.py
 ```
@@ -117,13 +133,16 @@ python scripts/setup_reader.py
 Setup downloads the default voice and configuration to `models/`, checks their
 sizes and checksums against the upstream voice registry, and retains the model
 card. Restart the app/service afterward. Voice files are excluded from Git.
-Downloads require Internet access; the installed English OCR and voice engines
+Package installation and the voice download require Internet access; the installed OCR and voice engines
 run locally without an external OCR/TTS API or API key. ONNX Runtime telemetry
 is disabled before inference. Existing remote viewing still uses the tunnel
 and the viewer's existing Socket.IO dependency.
 
-On Windows, install the Tesseract executable separately and add it to PATH
-(or set `TESSERACT_CMD` to its full path), then run the same Python commands.
+The commands are the same on Windows and Pi OS; no separate OCR program is needed.
+People viewing the Pi's website do not install these packages on their own devices.
+Existing Tesseract installations and the old `TESSERACT_CMD` / `OCR_LANGUAGE`
+settings are no longer used. Other OCR languages need separately validated models;
+the former Tesseract language-pack setting does not select RapidOCR models.
 For a different Piper voice, run `python scripts/setup_reader.py --voice CODE`
 and set `PIPER_MODEL` to the resulting `.onnx` file. Its `.onnx.json` file must
 remain next to it. Configure these environment variables in the systemd service
@@ -132,12 +151,12 @@ when using automatic startup; shell settings alone do not reach that service.
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `PIPER_MODEL` | `models/en_US-lessac-medium.onnx` relative to the app directory | Local neural voice model. |
-| `TESSERACT_CMD` | `tesseract` on PATH | Tesseract executable. |
-| `OCR_LANGUAGE` | `eng` | Installed Tesseract language packs, e.g. `eng+spa`. Use a matching speech voice for other languages. |
 
 If dependencies are missing, the viewer remains usable and the reader shows a
-setup/unavailable message. `GET /api/reader/status` reports installed components
-and model files; it does not prove camera accuracy or voice quality on the Pi.
+unavailable message. `GET /api/reader/status` checks for the OCR package, its bundled
+models, the CPU runtime, and the speech package/model files. If `ocr` is false,
+reinstall `requirements.txt` in the Python environment that actually runs the app
+and restart it. The status does not prove camera accuracy or voice quality on the Pi.
 
 ### Processing and limits
 
@@ -151,8 +170,8 @@ results are never broadcast to other viewers. Mutations require the custom
 One OCR or speech job runs at a time across viewers; extra requests receive a
 busy message instead of building up a queue. Native worker processes keep the
 web/Socket.IO loop responsive, and inference uses one CPU thread. Cancellation
-stops the worker and its Tesseract child. OCR has a 45-second outer deadline
-(30 seconds for Tesseract); speech has a 120-second deadline. Uploads are capped
+stops the worker process tree. OCR has a 45-second deadline;
+speech has a 120-second deadline. Uploads are capped
 at 6 MiB / 12 megapixels, recognized text at 20,000 characters, speech input at
 8,000 characters, and generated audio at 24 MiB. Long text is explicitly flagged
 or rejected rather than silently reading only part of a page.
@@ -168,8 +187,10 @@ Start validation with clear printed English worksheets. Blurred or tilted pages,
 handwriting, equations, and multiple columns need testing against the originals.
 The uncertainty message is a cue to check words, not an accuracy guarantee.
 
-Third-party components: [Tesseract](https://github.com/tesseract-ocr/tesseract)
-(Apache-2.0), [Piper](https://github.com/OHF-Voice/piper1-gpl) (GPL-3.0), and the
+Third-party components: [RapidOCR](https://github.com/RapidAI/RapidOCR)
+(Apache-2.0; see its bundled `MODEL_LICENSES.md` for model notices),
+[ONNX Runtime](https://github.com/microsoft/onnxruntime) (MIT),
+[Piper](https://github.com/OHF-Voice/piper1-gpl) (GPL-3.0), and the
 [Lessac voice model card](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD).
 Keep the applicable software and voice-model notices with a distributed device.
 
@@ -217,9 +238,11 @@ is not installed.
 Reader browser tests cover both camera sources, the exact zoom/pan crop,
 unfiltered snapshots, plain-text rendering, cancellation, neural-audio playback
 controls, and layouts at 1280×720, 800×480, and 390×600. Engine integration tests
-run real Tesseract and Piper when installed, otherwise they are explicitly
-skipped. Install `requirements-reader.txt` and run the voice setup to enable
-those tests. No public tunnel is started by the suite.
+run real RapidOCR and Piper when installed, otherwise they are explicitly
+skipped. OCR is included in the normal test dependencies; install
+`requirements-reader.txt` and run the voice setup to enable the speech tests.
+Recognition checks include printed text, skew, low contrast, blank/corrupt images,
+and operation without Tesseract or network downloads. No public tunnel is started by the suite.
 
 Before deploying, check the actual Pi camera, touchscreen/pinch interactions,
 Windows DirectShow if used, and a live Cloudflare connection. Automated tests

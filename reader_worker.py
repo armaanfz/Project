@@ -1,8 +1,9 @@
 """Isolated OCR / neural speech worker. No camera ownership or Flask imports."""
 import json
+import importlib.util
 import math
-import os
 from pathlib import Path
+import statistics
 import sys
 import warnings
 import wave
@@ -11,8 +12,49 @@ MAX_PIXELS = 12_000_000
 MAX_TEXT = 20_000
 
 
+def ocr_model_paths():
+    """Locate bundled models without importing OCR or loading the inference runtime."""
+    package = importlib.util.find_spec("rapidocr")
+    if package is None or not package.origin:
+        return {}
+    directory = Path(package.origin).parent / "models"
+    return {
+        "Det": directory / "PP-OCRv6_det_small.onnx",
+        "Cls": directory / "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+        "Rec": directory / "PP-OCRv6_rec_small.onnx",
+    }
+
+
+def reading_result(result):
+    """Reflow nearby lines into paragraphs, retaining larger gaps in the page."""
+    if not result.txts:
+        return {"text": "", "word_count": 0, "uncertain": False, "truncated": False}
+    lines = []
+    for box, value, confidence in zip(result.boxes, result.txts, result.scores):
+        text = " ".join(value.split())
+        if text:
+            top, bottom = min(point[1] for point in box), max(point[1] for point in box)
+            lines.append((text, float(top), float(bottom), float(confidence)))
+    if not lines:
+        return {"text": "", "word_count": 0, "uncertain": False, "truncated": False}
+    typical_height = statistics.median(max(1, bottom - top) for _, top, bottom, _ in lines)
+    paragraphs = []
+    words = []
+    previous_bottom = None
+    for text, top, bottom, _ in lines:
+        if previous_bottom is not None and top - previous_bottom > typical_height * 0.8:
+            paragraphs.append(" ".join(words))
+            words = []
+        words.append(text)
+        previous_bottom = bottom
+    paragraphs.append(" ".join(words))
+    text = "\n\n".join(paragraphs)
+    return {"text": text[:MAX_TEXT], "word_count": len(text.split()),
+            "uncertain": any(score < 0.8 for _, _, _, score in lines),
+            "truncated": len(text) > MAX_TEXT}
+
+
 def recognize(image_path):
-    import pytesseract
     from PIL import Image, ImageOps
 
     Image.MAX_IMAGE_PIXELS = MAX_PIXELS
@@ -31,34 +73,27 @@ def recognize(image_path):
     factor = min(2.0, max(1.0, 1600 / image.width), math.sqrt(4_000_000 / (image.width * image.height)))
     if abs(factor - 1) > 0.05:
         image = image.resize((max(1, round(image.width * factor)), max(1, round(image.height * factor))), Image.Resampling.LANCZOS)
-    if os.environ.get("TESSERACT_CMD"):
-        pytesseract.pytesseract.tesseract_cmd = os.environ["TESSERACT_CMD"]
-    data = pytesseract.image_to_data(
-        image, lang=os.environ.get("OCR_LANGUAGE", "eng"),
-        config="--psm 3", output_type=pytesseract.Output.DICT, timeout=30,
-    )
-    paragraphs = []
-    words = []
-    previous_paragraph = None
-    uncertain = 0
-    word_count = 0
-    for index, value in enumerate(data["text"]):
-        word = value.strip()
-        if not word:
-            continue
-        paragraph = (data["block_num"][index], data["par_num"][index])
-        if previous_paragraph is not None and paragraph != previous_paragraph:
-            paragraphs.append(" ".join(words))
-            words = []
-        previous_paragraph = paragraph
-        words.append(word)
-        word_count += 1
-        uncertain += float(data["conf"][index]) < 55
-    if words:
-        paragraphs.append(" ".join(words))
-    text = "\n\n".join(paragraphs)
-    return {"text": text[:MAX_TEXT], "word_count": word_count,
-            "uncertain": bool(uncertain), "truncated": len(text) > MAX_TEXT}
+    models = ocr_model_paths()
+    if not models or not all(path.is_file() for path in models.values()):
+        raise RuntimeError("Reinstall requirements.txt to restore the bundled OCR models.")
+    import onnxruntime
+    onnxruntime.disable_telemetry_events()
+    import cv2
+    cv2.setNumThreads(1)
+    from rapidocr import RapidOCR
+
+    # Explicit local paths prevent downloads during a scan. The models ship in
+    # the pinned Python package and the classifier corrects upside-down lines.
+    engine = RapidOCR(params={
+        **{f"{stage}.model_path": str(path) for stage, path in models.items()},
+        "Global.log_level": "error",
+        "Global.text_score": 0.3,
+        "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+        "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+        "Det.limit_type": "max",
+        "Det.limit_side_len": 1600,
+    })
+    return reading_result(engine(image))
 
 
 def speak(text, model_path, output_path):

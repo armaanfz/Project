@@ -6,9 +6,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
-import subprocess
-import sys
 import tempfile
 from urllib.request import urlopen
 
@@ -21,16 +18,8 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r"[a-z]{2}_[A-Z]{2}-[A-Za-z0-9_]+-(?:x_low|low|medium|high)", args.voice):
         parser.error("Use a Piper voice code such as en_US-lessac-medium")
-    for package in ("piper", "pytesseract"):
-        if importlib.util.find_spec(package) is None:
-            raise SystemExit("First run: python -m pip install -r requirements-reader.txt")
-    command = os.environ.get("TESSERACT_CMD", "tesseract")
-    if not shutil.which(command):
-        raise SystemExit("Install Tesseract first. On Raspberry Pi OS: sudo apt install tesseract-ocr tesseract-ocr-eng")
-    languages = subprocess.check_output([command, "--list-langs"], text=True, timeout=15).splitlines()[1:]
-    missing = set(os.environ.get("OCR_LANGUAGE", "eng").split("+")) - set(languages)
-    if missing:
-        raise SystemExit("Install these Tesseract language packs first: " + ", ".join(sorted(missing)))
+    if importlib.util.find_spec("piper") is None:
+        raise SystemExit("First run: python -m pip install -r requirements-reader.txt")
     destination = ROOT / "models"
     destination.mkdir(exist_ok=True)
     base = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
@@ -61,7 +50,7 @@ def main():
         card = Path(temporary) / "MODEL_CARD"
         if card.exists():
             os.replace(card, destination / f"{args.voice}.MODEL_CARD")
-    print(f"Tesseract found. Piper voice downloaded and checksums verified: {destination / model.name}")
+    print(f"Piper voice downloaded and checksums verified: {destination / model.name}")
     if args.voice != "en_US-lessac-medium":
         print(f"Set PIPER_MODEL to {destination / model.name} before starting the app.")
 

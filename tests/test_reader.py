@@ -1,6 +1,8 @@
 """Reader API, resource limits, cancellation, and actual installed engines."""
 from io import BytesIO
+import socket
 import time
+from types import SimpleNamespace
 import wave
 
 from PIL import Image
@@ -10,6 +12,7 @@ import pytest
 
 import app as app_module
 import reader
+import reader_worker
 
 HEADERS = {"X-Magnifier-Reader": "1"}
 
@@ -61,9 +64,37 @@ def ready(monkeypatch):
 def test_reader_reports_missing_setup_without_affecting_viewer(client, monkeypatch):
     monkeypatch.setattr(reader, "availability", lambda: {"ocr": False, "speech": False})
     assert client.get("/api/reader/status").json == {"ocr": False, "speech": False}
-    assert client.post("/api/ocr", headers=HEADERS).status_code == 503
+    response = client.post("/api/ocr", headers=HEADERS)
+    assert response.status_code == 503
+    assert "installation needs updating" in response.json["error"]
     assert client.post("/api/reader/speech", headers=HEADERS, json={"text": "Hello"}).status_code == 503
     assert client.get("/remote").status_code == 200
+
+
+def test_ocr_readiness_checks_bundled_models_without_loading_them(monkeypatch, tmp_path):
+    models = {stage: tmp_path / (stage + ".onnx") for stage in ("Det", "Cls", "Rec")}
+    monkeypatch.setattr(reader, "ocr_model_paths", lambda: models)
+    assert not reader.availability()["ocr"]
+    for model in models.values():
+        model.touch()
+    assert reader.availability()["ocr"]
+    models["Rec"].unlink()
+    assert not reader.availability()["ocr"]
+
+
+def test_recognition_keeps_paragraphs_uncertain_words_and_truncation_notice(monkeypatch):
+    result = SimpleNamespace(
+        txts=("The first line", "continues here.", "A new paragraph."),
+        scores=(0.99, 0.65, 0.99),
+        boxes=[[(0, y), (200, y), (200, y + 20), (0, y + 20)] for y in (0, 30, 100)],
+    )
+    output = reader_worker.reading_result(result)
+    assert output["text"] == "The first line continues here.\n\nA new paragraph."
+    assert output["word_count"] == 8
+    assert output["uncertain"] and not output["truncated"]
+    monkeypatch.setattr(reader_worker, "MAX_TEXT", 12)
+    output = reader_worker.reading_result(result)
+    assert len(output["text"]) == 12 and output["truncated"]
 
 
 def test_reader_rejects_cross_site_forms_and_invalid_inputs(client, ready):
@@ -145,23 +176,47 @@ def test_real_worker_timeout_removes_temporary_image(monkeypatch, tmp_path):
     assert list(tmp_path.glob("magnifier-reader-*")) == []
 
 
-@pytest.mark.skipif(not reader.availability()["ocr"], reason="Install Tesseract and requirements-reader.txt")
-def test_real_tesseract_worker_reads_printed_text():
-    result, audio = reader.run_job(reader.Job("actual-ocr", "ocr"), page_image())
+@pytest.mark.skipif(not reader.availability()["ocr"], reason="Install requirements.txt for bundled RapidOCR")
+@pytest.mark.parametrize("variant", ["original", "skew", "low_contrast"])
+def test_real_rapidocr_worker_reads_printed_text_without_tesseract(variant, monkeypatch, tmp_path):
+    # No executable or Tesseract configuration can be used in this environment.
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setenv("TESSERACT_CMD", str(tmp_path / "not-installed"))
+    image = Image.open(BytesIO(page_image())).convert("RGB")
+    if variant == "skew":
+        image = image.rotate(7, expand=True, fillcolor="white")
+    elif variant == "low_contrast":
+        from PIL import ImageEnhance
+        image = ImageEnhance.Contrast(image).enhance(0.15)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    result, audio = reader.run_job(reader.Job("actual-ocr", "ocr"), buffer.getvalue())
     assert "magnifier makes reading easier" in result["text"]
     assert "students learn" in result["text"]
     assert result["word_count"] >= 10
     assert not audio
 
 
-@pytest.mark.skipif(not reader.availability()["ocr"], reason="Install Tesseract and requirements-reader.txt")
-def test_real_tesseract_worker_handles_blank_and_corrupt_images():
+@pytest.mark.skipif(not reader.availability()["ocr"], reason="Install requirements.txt for bundled RapidOCR")
+def test_real_rapidocr_worker_handles_blank_and_corrupt_images():
     blank = BytesIO()
     Image.new("RGB", (400, 300), "white").save(blank, format="PNG")
     result, _audio = reader.run_job(reader.Job("blank", "ocr"), blank.getvalue())
     assert result["text"] == ""
     with pytest.raises(RuntimeError, match="clearer"):
         reader.run_job(reader.Job("corrupt", "ocr"), b"\xff\xd8\xffnot an image")
+
+
+@pytest.mark.skipif(not reader.availability()["ocr"], reason="Install requirements.txt for bundled RapidOCR")
+def test_first_ocr_scan_uses_bundled_models_without_network(monkeypatch, tmp_path):
+    def no_network(*_args, **_kwargs):
+        raise AssertionError("OCR must not download models or send the page over the network")
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", no_network)
+    image = tmp_path / "page.png"
+    image.write_bytes(page_image())
+    output = reader_worker.recognize(image)
+    assert "students learn" in output["text"]
 
 
 @pytest.mark.skipif(not reader.availability()["speech"], reason="Run scripts/setup_reader.py for the real Piper voice")

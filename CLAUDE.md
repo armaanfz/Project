@@ -39,6 +39,7 @@ Cloudflare tunnel → :5000
 - `remote.html` + `static/js/samples.js` — remote stream viewer. Connects to Socket.IO `/stream` namespace, draws JPEG frames to canvas. Uses the shared zoom/filter/mask controls.
 - Both viewers include `reader.html` and `static/js/reader.js` for on-demand OCR and Piper audio. `samples.js:captureReaderImage()` captures the unfiltered visible camera area. Browser speech synthesis must not be used.
 - `reader.py` exposes `/api/ocr` and `/api/reader/*`; native subprocesses in `reader_worker.py` do OCR and neural speech, one job at a time, with cancellation and deadlines. Reader imports do not launch workers or load models.
+- OCR uses RapidOCR with PP-OCRv6 models bundled in its pinned Python package; it is part of `requirements.txt`. Do not reintroduce a Tesseract executable or runtime model downloads. ONNX Runtime telemetry is disabled before either OCR or speech inference.
 - `index.html` — home page with tabs, tunnel URL display, and shutdown button.
 
 ## Key Design Decisions
@@ -76,10 +77,11 @@ browser tests live in `tests/test_viewer.py`; install `requirements-browser.txt`
 and run `python -m playwright install chromium` first. See README.md for details.
 
 Reader tests are in `tests/test_reader.py` and `tests/test_reader_viewer.py`.
-Install `requirements-reader.txt`, the Tesseract executable/language pack, and
-run `python scripts/setup_reader.py` to enable actual OCR/Piper integration
-checks. Voice models stay in ignored `models/`; never commit them. The README
-documents setup, limits, result expiry, and `PIPER_MODEL`/`OCR_LANGUAGE` settings.
+OCR is installed with `requirements-dev.txt`. Install `requirements-reader.txt`
+and run `python scripts/setup_reader.py` to enable actual Piper integration
+checks. Voice models stay in ignored `models/`; never commit them. OCR models
+are provided by the installed RapidOCR package, never committed here. The README
+documents setup, limits, result expiry, and the `PIPER_MODEL` setting.
 
 ## Common Development Tasks
 

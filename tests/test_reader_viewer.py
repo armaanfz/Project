@@ -17,16 +17,20 @@ import reader
 READING = "Reading with confidence\n\nPlace your worksheet under the camera. Read the text at a size that is comfortable for you.\n\nYou can change the colors or listen to the page aloud."
 
 
-def inject_remote_frame(page):
-    frame = np.full((900, 1600, 3), (255, 0, 0), dtype=np.uint8)
-    frame[:, :800] = (0, 0, 255)
+def remote_image(width=1600, height=900):
+    frame = np.full((height, width, 3), (255, 0, 0), dtype=np.uint8)
+    frame[:, :width // 2] = (0, 0, 255)
     _, encoded = cv2.imencode(".jpg", frame)
-    page.evaluate("data => testSocket.receive('frame', {data: new Uint8Array(data)})", encoded.tolist())
+    return encoded.tobytes()
+
+
+def inject_remote_frame(page):
+    page.evaluate("data => testSocket.receive('frame', {data: new Uint8Array(data)})", list(remote_image()))
     page.wait_for_function("readerRemoteFrame !== null")
 
 
-def mock_reader(page, text=READING, speech=True, empty=False):
-    calls = {"images": [], "speech": [], "deleted": []}
+def mock_reader(page, text=READING, speech=True, empty=False, snapshot_size=(1600, 900)):
+    calls = {"images": [], "speech": [], "deleted": [], "snapshots": 0}
     output = BytesIO()
     with wave.open(output, "wb") as wav:
         wav.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
@@ -39,6 +43,10 @@ def mock_reader(page, text=READING, speech=True, empty=False):
             route.fulfill(status=204)
         elif path == "reader/status":
             route.fulfill(json={"ocr": True, "speech": speech})
+        elif path == "reader/snapshot":
+            assert request.method == "POST" and request.headers["x-magnifier-reader"] == "1"
+            calls["snapshots"] += 1
+            route.fulfill(body=remote_image(*snapshot_size), content_type="image/jpeg")
         elif path == "ocr":
             data = ("Content-Type: " + request.headers["content-type"] + "\r\n\r\n").encode() + request.post_data_buffer
             multipart = BytesParser(policy=policy.default).parsebytes(data)
@@ -74,6 +82,7 @@ def test_read_text_restores_camera_and_keeps_preferences(page, viewer_server, ro
     page.wait_for_function("document.getElementById('reader-text').textContent.length > 0")
     assert page.locator("#reader-text").inner_text() == READING
     assert calls["images"][0].startswith(b"\x89PNG")
+    assert calls["snapshots"] == (1 if route == "/remote" else 0)
     page.keyboard.press("+")
     assert page.locator("#zoom-slider").input_value() == "2"
     page.locator("#reader-larger").click()
@@ -89,8 +98,9 @@ def test_read_text_restores_camera_and_keeps_preferences(page, viewer_server, ro
     assert page.locator("#reader-size-label").inner_text() == "36 px"
 
 
-def test_remote_capture_follows_crop_and_ignores_filters_and_mask(page, viewer_server):
-    calls = mock_reader(page)
+@pytest.mark.parametrize("source_size,expected_size", [((1600, 900), (600, 450)), ((3200, 1800), (1200, 900))])
+def test_remote_capture_follows_crop_and_ignores_filters_and_mask(page, viewer_server, source_size, expected_size):
+    calls = mock_reader(page, snapshot_size=source_size)
     page.set_viewport_size({"width": 800, "height": 600})
     ready_camera(page, viewer_server)
     page.evaluate("""() => {
@@ -101,10 +111,39 @@ def test_remote_capture_follows_crop_and_ignores_filters_and_mask(page, viewer_s
     page.locator("#read-text-btn").click()
     page.wait_for_function("document.getElementById('reader-text').textContent.length > 0")
     image = Image.open(BytesIO(calls["images"][0])).convert("RGB")
-    assert image.size == (600, 450)
-    red, blue = image.getpixel((50, 225)), image.getpixel((550, 225))
+    assert image.size == expected_size
+    red, blue = image.getpixel((50, image.height // 2)), image.getpixel((image.width - 50, image.height // 2))
     assert red[0] > 240 and red[1] < 15
     assert blue[2] > 240 and blue[1] < 15
+
+
+def test_remote_snapshot_failure_is_shown_without_scanning_stale_preview(page, viewer_server):
+    calls = mock_reader(page)
+    page.route("**/api/reader/snapshot", lambda route: route.fulfill(
+        status=503, json={"error": "Wait for the camera to connect, then scan again."}))
+    ready_camera(page, viewer_server)
+    page.locator("#read-text-btn").click()
+    page.wait_for_function("document.getElementById('reader-status').textContent.includes('camera to connect')")
+    assert not calls["images"]
+
+
+def test_cancelling_snapshot_does_not_start_ocr(page, viewer_server):
+    calls = mock_reader(page)
+    held = []
+    def hold_snapshot(route):
+        held.append(route)
+        page.evaluate("window.testSnapshotHeld = true")
+    page.route("**/api/reader/snapshot", hold_snapshot)
+    ready_camera(page, viewer_server)
+    page.locator("#read-text-btn").click()
+    page.wait_for_function("window.testSnapshotHeld === true")
+    assert held
+    with page.expect_event("requestfailed", predicate=lambda request: request.url.endswith("/reader/snapshot")):
+        page.locator("#reader-close").click()
+    held[0].fulfill(body=remote_image(), content_type="image/jpeg")
+    page.wait_for_function("activeFrameURLs.size === 0")
+    assert not calls["images"]
+    assert not page.locator("#reader-dialog").evaluate("dialog => dialog.open")
 
 
 def test_reader_keeps_untrusted_ocr_as_plain_text(page, viewer_server):
@@ -220,8 +259,11 @@ def test_reader_layout_and_touch_controls_fit_screen(page, viewer_server, size):
     page.screenshot(path=str(reports / f"reader-{size[0]}x{size[1]}.png"))
 
 
-@pytest.mark.skipif(not all(reader.availability().values()), reason="Install reader engines and voice for end-to-end check")
-def test_real_camera_image_to_ocr_to_piper_audio(page, viewer_server):
+@pytest.mark.skipif(not reader.availability()["ocr"], reason="Install OCR for end-to-end check")
+@pytest.mark.parametrize("read_aloud", [False, True])
+def test_real_camera_image_to_ocr_and_optional_piper_audio(page, viewer_server, read_aloud):
+    if read_aloud and not reader.availability()["speech"]:
+        pytest.skip("Install Piper and its voice for the audio check")
     from test_reader import page_image
     page.set_viewport_size({"width": 1300, "height": 500})
     page.add_init_script("""
@@ -232,13 +274,15 @@ def test_real_camera_image_to_ocr_to_piper_audio(page, viewer_server):
     page.goto(viewer_server + "/remote")
     frame = cv2.imdecode(np.frombuffer(page_image(), dtype=np.uint8), cv2.IMREAD_COLOR)
     encoded = cv2.imencode(".jpg", frame)[1]
+    page.route("**/api/reader/snapshot", lambda route: route.fulfill(body=encoded.tobytes(), content_type="image/jpeg"))
     page.evaluate("data => testSocket.receive('frame', {data: new Uint8Array(data)})", encoded.tolist())
     page.wait_for_function("readerRemoteFrame !== null")
     page.locator("#read-text-btn").click()
     page.wait_for_function("document.getElementById('reader-text').textContent.includes('magnifier')", timeout=45000)
     assert "students learn" in page.locator("#reader-text").inner_text()
-    page.locator("#reader-speak").click()
-    page.wait_for_function("!document.getElementById('reader-pause').hidden", timeout=125000)
-    assert page.evaluate("testReaderAudio.duration > 2 && !testReaderAudio.paused")
+    if read_aloud:
+        page.locator("#reader-speak").click()
+        page.wait_for_function("!document.getElementById('reader-pause').hidden", timeout=125000)
+        assert page.evaluate("testReaderAudio.duration > 2 && !testReaderAudio.paused")
     page.locator("#reader-close").click()
     page.wait_for_function("activeFrameURLs.size === 0")

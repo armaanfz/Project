@@ -1,5 +1,6 @@
 """Exercise stream recovery, quality selection, and reconnects without a camera."""
 from unittest.mock import Mock
+import time
 
 import cv2
 import numpy as np
@@ -15,6 +16,8 @@ def stream_state(monkeypatch):
     monkeypatch.setattr(app_module, "_release_timer", None)
     monkeypatch.setattr(app_module, "_camera", None)
     monkeypatch.setattr(app_module, "_current_mode", None)
+    monkeypatch.setattr(app_module, "_reader_frame", None)
+    monkeypatch.setattr(app_module, "_reader_frame_at", 0.0)
     yield
     app_module._cancel_release_timer()
     app_module._release_camera()
@@ -159,3 +162,52 @@ def test_jpeg_encoding_error_does_not_stop_next_frame(monkeypatch):
     app_module._stream_frames()
     assert encode.call_count == 2
     emit.assert_called_once()
+
+
+def test_remote_camera_requests_full_detail_for_ocr():
+    camera = Mock()
+    app_module._configure_camera(camera, app_module.STREAM_PROFILES["remote"])
+    settings = dict(call.args for call in camera.set.call_args_list)
+    assert settings[cv2.CAP_PROP_FRAME_WIDTH] == app_module.CAMERA_WIDTH
+    assert settings[cv2.CAP_PROP_FRAME_HEIGHT] == app_module.CAMERA_HEIGHT
+
+
+@pytest.mark.parametrize("shape", [(1080, 1920), (480, 640)])
+def test_snapshot_keeps_source_resolution_while_remote_stream_is_bounded(monkeypatch, shape):
+    frame = np.full((*shape, 3), (20, 80, 200), dtype=np.uint8)
+    camera = Mock()
+    camera.read.return_value = (True, frame)
+    capture = Mock(return_value=camera)
+    monkeypatch.setattr(app_module, "_get_camera", capture)
+    emit = Mock()
+    monkeypatch.setattr(app_module.socketio, "emit", emit)
+    monkeypatch.setattr(app_module.socketio, "sleep", lambda _delay: app_module._stream_client_modes.clear())
+    app_module._stream_client_modes.update({"one": "remote", "two": "local"})
+    app_module._stream_frames()
+    for call in emit.call_args_list:
+        delivered = cv2.imdecode(np.frombuffer(call.args[1]["data"], np.uint8), cv2.IMREAD_COLOR)
+        expected = (min(shape[0], 720), min(shape[1], 1280)) if call.kwargs["to"] == "one" else shape
+        assert delivered.shape[:2] == expected
+    with app_module.app.test_client() as client:
+        response = client.post("/api/reader/snapshot", headers={"X-Magnifier-Reader": "1"})
+    assert response.status_code == 200 and response.mimetype == "image/jpeg"
+    assert response.headers["Cache-Control"] == "no-store"
+    original = cv2.imdecode(np.frombuffer(response.data, np.uint8), cv2.IMREAD_COLOR)
+    assert original.shape[:2] == shape
+    assert np.max(np.abs(original.astype(int) - frame.astype(int))) <= 3
+    capture.assert_called_once()
+    camera.read.assert_called_once()
+
+
+def test_snapshot_rejects_missing_stale_and_released_camera(monkeypatch):
+    with app_module.app.test_client() as client:
+        assert client.post("/api/reader/snapshot").status_code == 403
+        headers = {"X-Magnifier-Reader": "1"}
+        assert client.post("/api/reader/snapshot", headers=headers).status_code == 503
+        monkeypatch.setattr(app_module, "_reader_frame", np.zeros((20, 30, 3), dtype=np.uint8))
+        monkeypatch.setattr(app_module, "_reader_frame_at", time.monotonic() - 4)
+        assert client.post("/api/reader/snapshot", headers=headers).status_code == 503
+        monkeypatch.setattr(app_module, "_reader_frame_at", time.monotonic())
+        app_module._release_camera()
+        assert app_module._reader_frame is None
+        assert client.post("/api/reader/snapshot", headers=headers).status_code == 503

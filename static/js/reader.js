@@ -157,10 +157,14 @@
         trigger.setAttribute('aria-expanded', 'true');
         message('Recognizing text…');
         byId('reader-body').scrollTop = 0;
+        const captureController = new AbortController();
+        controller = captureController;
         try {
             const [blob, capabilities] = await Promise.all([
-                window.captureReaderImage(),
-                fetch('/api/reader/status', { signal: AbortSignal.timeout(10000) }).then(responseJSON),
+                window.captureReaderImage({ signal: captureController.signal }),
+                fetch('/api/reader/status', {
+                    signal: AbortSignal.any([captureController.signal, AbortSignal.timeout(10000)]),
+                }).then(responseJSON),
             ]);
             if (!current(token)) return;
             speechAvailable = capabilities.speech;
@@ -199,6 +203,9 @@
             byId('reader-close').textContent = 'Back to Camera';
             byId('reader-actions').hidden = false;
             idleSpeech();
+        } finally {
+            captureController.abort();
+            if (controller === captureController) controller = null;
         }
     }
 

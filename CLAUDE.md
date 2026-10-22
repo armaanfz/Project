@@ -37,15 +37,16 @@ Cloudflare tunnel → :5000
 **Frontend pages:**
 - `samples.html` + `static/js/samples.js` — local camera page. Uses `getUserMedia()` → `<video>` with CSS transforms/filters and a separate mask canvas. All shared viewer logic lives in `samples.js` (~1500 lines).
 - `remote.html` + `static/js/samples.js` — remote stream viewer. Connects to Socket.IO `/stream` namespace, draws JPEG frames to canvas. Uses the shared zoom/filter/mask controls.
-- Both viewers include `reader.html` and `static/js/reader.js` for on-demand OCR and Piper audio. `samples.js:captureReaderImage()` captures the unfiltered visible camera area. Browser speech synthesis must not be used.
+- Both viewers include `reader.html` and `static/js/reader.js` for on-demand OCR and Piper audio. `samples.js:captureReaderImage()` captures the unfiltered visible camera area. Remote scans fetch `/api/reader/snapshot` at source resolution before applying the visible crop. Browser speech synthesis must not be used.
 - `reader.py` exposes `/api/ocr` and `/api/reader/*`; native subprocesses in `reader_worker.py` do OCR and neural speech, one job at a time, with cancellation and deadlines. Reader imports do not launch workers or load models.
-- OCR uses RapidOCR with PP-OCRv6 models bundled in its pinned Python package; it is part of `requirements.txt`. Do not reintroduce a Tesseract executable or runtime model downloads. ONNX Runtime telemetry is disabled before either OCR or speech inference.
+- OCR explicitly uses RapidOCR with PP-OCRv6 **small** detection/recognition models bundled in its pinned Python package; it is part of `requirements.txt`. Use the ONNX Runtime CPU backend, with `OCR_CPU_THREADS=2` by default for Pi 5 (bounded to 1–4). Do not reintroduce a Tesseract executable or runtime model downloads. ONNX Runtime telemetry is disabled before either OCR or speech inference.
 - `index.html` — home page with tabs, tunnel URL display, and shutdown button.
 
 ## Key Design Decisions
 
 - **Socket.IO mode detection**: Host header — `localhost`/`127.0.0.1` → `local` profile, anything else → `remote` profile.
-- **Single process**: Flask + Socket.IO runs on port 5000 directly. No separate stream server or proxy layer.
+- **Single web process**: Flask + Socket.IO runs on port 5000 directly. Bounded reader subprocesses perform inference. No separate stream server or proxy layer.
+- **OCR snapshots**: The stream retains one raw frame at the larger local/active capture resolution. JPEG delivery is resized per viewer profile. Snapshot requests reuse the camera owner and reject stale frames; camera release clears the retained frame.
 - **Async backend**: `threading` on Windows (dev), `gevent` on Linux/Pi (prod). Set via `SOCKETIO_ASYNC_MODE` env var.
 - **Camera release grace period**: Camera is held for 2 seconds after the last client disconnects to avoid rapid off/on during reconnects.
 - **Cloudflare quick tunnel** — ephemeral URL, changes every restart. No persistent domain.
@@ -82,6 +83,8 @@ and run `python scripts/setup_reader.py` to enable actual Piper integration
 checks. Voice models stay in ignored `models/`; never commit them. OCR models
 are provided by the installed RapidOCR package, never committed here. The README
 documents setup, limits, result expiry, and the `PIPER_MODEL` setting.
+`python scripts/check_ocr.py [path/to/page.jpg]` runs the real worker and reports
+the selected model and elapsed time for installation and Pi performance checks.
 
 ## Common Development Tasks
 

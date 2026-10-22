@@ -878,7 +878,7 @@ function closeAllPanels() {
 
 // Shared OCR capture for the browser camera and Pi stream. The crop follows the
 // actual rendered transform (including an in-progress zoom animation).
-window.captureReaderImage = async function () {
+window.captureReaderImage = async function ({ signal } = {}) {
     let source = videoElement;
     let bitmap = null;
     if (isRemoteCanvasMode) {
@@ -886,12 +886,22 @@ window.captureReaderImage = async function () {
         if (!frame || performance.now() - frame.capturedAt > 5000) {
             throw new Error('Wait for the camera to connect, then scan again.');
         }
-        bitmap = await createImageBitmap(new Blob([frame.data], { type: 'image/jpeg' }));
+        // Fetch the original server capture, before streaming resize/compression.
+        const response = await fetch('/api/reader/snapshot', {
+            method: 'POST', headers: { 'X-Magnifier-Reader': '1' },
+            signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
+        });
+        if (!response.ok) {
+            const problem = await response.json().catch(() => ({}));
+            throw new Error(problem.error || 'Could not capture the page. Please try again.');
+        }
+        bitmap = await createImageBitmap(await response.blob());
         source = bitmap;
     } else if (!videoElement || videoElement.readyState < 2) {
         throw new Error('Wait for the camera to start, then scan again.');
     }
     try {
+        signal?.throwIfAborted();
         const sourceWidth = source.videoWidth || source.width;
         const sourceHeight = source.videoHeight || source.height;
         const rect = viewerElement.getBoundingClientRect();

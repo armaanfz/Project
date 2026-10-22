@@ -41,6 +41,7 @@ PowerShell, use `$env:DISABLE_TUNNEL='1'` and then `python app.py`.
 | `templates/reader.html`, `static/js/reader.js` | Shared accessible Read Text dialog and Piper audio playback. |
 | `reader.py`, `reader_worker.py` | OCR/speech jobs, isolated processing, cancellation, and cleanup. |
 | `scripts/setup_reader.py` | Voice download with registry checksum validation. |
+| `scripts/check_ocr.py` | Run the installed PP-OCRv6 small worker and measure a scan on the device. |
 | `static/images/magnifier.png` | Home background and site icon. |
 | `magnifier-stream.service` | Single systemd service for `app.py` on port 5000. |
 | `tests/test_app.py` | Routes, shutdown restrictions, configuration, and tunnel lifecycle tests. |
@@ -60,9 +61,11 @@ Text recognition and its models are included in the normal runtime installation.
   Socket.IO `/stream` namespace. Open this page through the tunnel to view the
   Pi's camera from another device.
 
-The server shares one camera across stream viewers. Any remote viewer selects
-the remote capture profile; local viewers still receive their configured JPEG
-quality. A frame is encoded once per distinct requested quality. The browser
+The server shares one camera across stream viewers. Capture uses the larger of
+the local and active stream resolution (1920×1080 by default), so remote OCR
+retains source detail. Remote viewers receive frames resized to fit their
+1280×720 profile, preserving aspect ratio; local viewers receive their configured
+size and JPEG quality. A frame is encoded once per distinct size and quality. The browser
 decodes one frame at a time and retains only the newest waiting frame. Remote
 images use the same aspect-preserving crop as the local camera view.
 
@@ -88,17 +91,28 @@ cannot open the same device for `/samples` and `/remote` simultaneously. Use
 
 Read Text scans the visible camera area once, then opens a full-screen reading
 view. The snapshot follows zoom and pan and uses original camera pixels before
-display color filters and the mask. It does not open another camera. Both local
-and remote viewers use the same capture and reader controls.
+display color filters and the mask. It does not open another camera. Remote
+scans fetch a fresh high-quality snapshot from the server's retained raw frame,
+before the streaming resize and compression. The camera must be streaming;
+frames older than three seconds are rejected and releasing the camera clears
+the snapshot. Both local and remote viewers use the same reader controls.
 
-The reading view offers text size, four contrast combinations, and Read Aloud
-with Pause, Resume, Stop, and playback speed. Text wraps to fit the screen.
+The reading view offers text size and all 12 magnifier color/filter presets:
+white on black, black on white, yellow on black, blue on yellow, orange on black,
+green on black, purple on black, grayscale, inverted grayscale, protanopia,
+deuteranopia, and tritanopia. Grayscale and color simulations can look unchanged
+on monochrome text. Read Aloud provides Pause, Resume, Stop, and two speeds:
+Slower (0.75×) and Normal (1×). Previously saved faster speeds reset to Normal.
+Text wraps to fit the screen.
 Scan Again returns to the camera so the next page can be positioned before
 tapping Read Text. Back to Camera preserves the existing magnifier settings.
 Reader appearance and speed are saved separately; scanned text is not saved
 to browser storage. Escape closes the dialog and restores focus to Read Text.
 
-Text recognition uses **RapidOCR with bundled PP-OCRv6 neural models**. Installing
+Text recognition uses **RapidOCR with bundled PP-OCRv6 small neural models**. Both
+the text detector and recognizer explicitly select the small variant and ONNX
+Runtime's CPU backend. The separate orientation classifier corrects upside-down
+text lines. Installing
 `requirements.txt` installs the OCR engine, CPU runtime, and recognition models.
 There is no Tesseract executable, PATH setting, language-pack installer, API key,
 or first-scan model download. Scans run locally on the machine hosting Flask.
@@ -120,7 +134,15 @@ the dependencies and restart the app to enable **Read Text**:
 
 ```sh
 python -m pip install -r requirements.txt
+python scripts/check_ocr.py
 ```
+
+The check runs the real OCR worker on a generated sentence and reports the model,
+runtime, CPU thread count, recognized text, and elapsed time. It exits with an
+error if the sentence cannot be read. To measure a real camera page on your
+Raspberry Pi 5 (8 GB), run `python scripts/check_ocr.py path/to/page.jpg`.
+Timing includes a fresh worker and model load, as each app scan does. Desktop
+results do not establish Pi scan speed. Neither check downloads OCR models.
 
 To enable **Read Aloud** as well, run these commands instead. They install the
 same OCR dependencies plus Piper and download its voice:
@@ -151,17 +173,21 @@ when using automatic startup; shell settings alone do not reach that service.
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `PIPER_MODEL` | `models/en_US-lessac-medium.onnx` relative to the app directory | Local neural voice model. |
+| `OCR_CPU_THREADS` | `2` | OCR CPU thread budget, clamped to 1–4 and available cores. Set `1` if streaming needs more CPU time. Speech remains at one thread. |
 
 If dependencies are missing, the viewer remains usable and the reader shows a
 unavailable message. `GET /api/reader/status` checks for the OCR package, its bundled
-models, the CPU runtime, and the speech package/model files. If `ocr` is false,
+models, the CPU runtime, and the speech package/model files. It also reports
+`ocr_model`, `ocr_runtime`, and `ocr_threads` for deployment checks. If `ocr` is false,
 reinstall `requirements.txt` in the Python environment that actually runs the app
 and restart it. The status does not prove camera accuracy or voice quality on the Pi.
 
 ### Processing and limits
 
-`POST /api/ocr` accepts a PNG/JPEG snapshot. `POST /api/reader/speech` accepts
-recognized text. Each returns an unguessable job ID immediately; the UI polls
+`POST /api/reader/snapshot` retrieves a fresh server-camera JPEG for the remote
+reader using the same custom header below. `POST /api/ocr` accepts a PNG/JPEG
+snapshot and `POST /api/reader/speech` accepts recognized text. The OCR and speech
+endpoints return an unguessable job ID immediately; the UI polls
 `GET /api/reader/jobs/<id>`, downloads completed speech from its `/audio` URL,
 and deletes jobs with `DELETE /api/reader/jobs/<id>`. IDs are bearer tokens:
 results are never broadcast to other viewers. Mutations require the custom
@@ -169,7 +195,8 @@ results are never broadcast to other viewers. Mutations require the custom
 
 One OCR or speech job runs at a time across viewers; extra requests receive a
 busy message instead of building up a queue. Native worker processes keep the
-web/Socket.IO loop responsive, and inference uses one CPU thread. Cancellation
+web/Socket.IO loop responsive. OCR defaults to two CPU threads for the Pi 5;
+speech uses one. Cancellation
 stops the worker process tree. OCR has a 45-second deadline;
 speech has a 120-second deadline. Uploads are capped
 at 6 MiB / 12 megapixels, recognized text at 20,000 characters, speech input at
@@ -199,8 +226,8 @@ Keep the applicable software and voice-model notices with a distributed device.
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
 | `CAMERA_INDEX` | `0` | Server camera device. |
-| `CAMERA_WIDTH`, `CAMERA_HEIGHT`, `CAMERA_FPS` | `1920`, `1080`, `30` | Local capture profile. |
-| `REMOTE_CAMERA_WIDTH`, `REMOTE_CAMERA_HEIGHT`, `REMOTE_CAMERA_FPS` | `1280`, `720`, `30` | Remote capture profile. |
+| `CAMERA_WIDTH`, `CAMERA_HEIGHT`, `CAMERA_FPS` | `1920`, `1080`, `30` | Local stream profile and preferred source resolution for OCR. Camera support determines actual capture size. |
+| `REMOTE_CAMERA_WIDTH`, `REMOTE_CAMERA_HEIGHT`, `REMOTE_CAMERA_FPS` | `1280`, `720`, `30` | Remote output size and active capture frame rate. |
 | `LOCAL_JPEG_QUALITY`, `REMOTE_JPEG_QUALITY` | `92`, `75` | JPEG quality, clamped to 1–100. |
 | `STREAM_RELEASE_GRACE_SECONDS` | `2.0` | Hold the server camera after the last viewer leaves. |
 | `SHUTDOWN_COOLDOWN_SECONDS` | `30` | Minimum time between accepted shutdown requests. |

@@ -15,9 +15,9 @@ import tempfile
 import threading
 import time
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
-from reader_worker import ocr_model_paths
+from reader_worker import OCR_MODEL, ocr_cpu_threads, ocr_model_paths
 
 reader_api = Blueprint("reader", __name__, url_prefix="/api")
 ROOT = Path(__file__).resolve().parent
@@ -41,6 +41,9 @@ def availability():
                and importlib.util.find_spec("onnxruntime") is not None,
         "speech": importlib.util.find_spec("piper") is not None
                   and model.is_file() and Path(str(model) + ".json").is_file(),
+        "ocr_model": OCR_MODEL,
+        "ocr_runtime": "ONNX Runtime CPU",
+        "ocr_threads": ocr_cpu_threads(),
     }
 
 
@@ -86,7 +89,8 @@ def run_job(job, payload):
         environment = os.environ.copy()
         # Keep the Pi's other cores available for camera capture / JPEG encoding.
         for name in ("OMP_THREAD_LIMIT", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
-            environment[name] = "1"
+            environment[name] = str(ocr_cpu_threads() if job.kind == "ocr" else 1)
+        environment["ORT_DISABLE_TELEMETRY"] = "1"
         process = subprocess.Popen(
             [sys.executable, str(ROOT / "reader_worker.py"), job.kind, temporary],
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -227,6 +231,19 @@ def image_too_large(_error):
 @reader_api.get("/reader/status")
 def reader_status():
     return jsonify(availability())
+
+
+@reader_api.post("/reader/snapshot")
+def reader_snapshot():
+    """Return a fresh, unfiltered frame from the existing server camera owner."""
+    capture = current_app.config.get("READER_FRAME_SOURCE")
+    if capture is None:
+        return jsonify(error="The camera is unavailable. Please reconnect and scan again."), 503
+    try:
+        data = capture()
+    except RuntimeError as exc:
+        return jsonify(error=str(exc)), 503
+    return send_file(BytesIO(data), mimetype="image/jpeg")
 
 
 def start_job(kind, payload):

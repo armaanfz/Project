@@ -2,6 +2,7 @@
 import json
 import importlib.util
 import math
+import os
 from pathlib import Path
 import statistics
 import sys
@@ -10,6 +11,16 @@ import wave
 
 MAX_PIXELS = 12_000_000
 MAX_TEXT = 20_000
+OCR_MODEL = "PP-OCRv6 small"
+
+
+def ocr_cpu_threads():
+    """Leave CPU capacity for the Pi 5 camera while allowing device tuning."""
+    try:
+        value = int(os.environ.get("OCR_CPU_THREADS", "2"))
+    except ValueError:
+        value = 2
+    return max(1, min(value, 4, os.cpu_count() or 1))
 
 
 def ocr_model_paths():
@@ -80,20 +91,29 @@ def recognize(image_path):
     onnxruntime.disable_telemetry_events()
     import cv2
     cv2.setNumThreads(1)
-    from rapidocr import RapidOCR
+    from rapidocr import EngineType, ModelType, OCRVersion, RapidOCR
 
     # Explicit local paths prevent downloads during a scan. The models ship in
     # the pinned Python package and the classifier corrects upside-down lines.
     engine = RapidOCR(params={
         **{f"{stage}.model_path": str(path) for stage, path in models.items()},
+        **{f"{stage}.engine_type": EngineType.ONNXRUNTIME for stage in models},
+        **{f"{stage}.ocr_version": OCRVersion.PPOCRV6 for stage in ("Det", "Rec")},
+        **{f"{stage}.model_type": ModelType.SMALL for stage in ("Det", "Rec")},
+        "Cls.ocr_version": OCRVersion.PPOCRV4,
+        "Cls.model_type": ModelType.MOBILE,
         "Global.log_level": "error",
         "Global.text_score": 0.3,
-        "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+        "EngineConfig.onnxruntime.intra_op_num_threads": ocr_cpu_threads(),
         "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+        "EngineConfig.onnxruntime.use_cuda": False,
+        "EngineConfig.onnxruntime.use_dml": False,
+        "EngineConfig.onnxruntime.use_cann": False,
+        "EngineConfig.onnxruntime.use_coreml": False,
         "Det.limit_type": "max",
         "Det.limit_side_len": 1600,
     })
-    return reading_result(engine(image))
+    return {**reading_result(engine(image)), "model": OCR_MODEL}
 
 
 def speak(text, model_path, output_path):

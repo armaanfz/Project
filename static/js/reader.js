@@ -16,8 +16,8 @@
     audio.preload = 'auto';
     audio.preservesPitch = true;
     const preferenceKey = 'magnifier_reader_settings';
-    const colors = ['dark', 'light', 'yellow', 'blue'];
-    const speeds = [0.75, 1, 1.25, 1.5];
+    const colors = Array.from(byId('reader-colors').options, option => option.value);
+    const speeds = [0.75, 1];
     let preferences = { fontSize: 32, colors: 'dark', speed: 1 };
     try {
         const saved = JSON.parse(localStorage.getItem(preferenceKey));
@@ -157,10 +157,14 @@
         trigger.setAttribute('aria-expanded', 'true');
         message('Recognizing text…');
         byId('reader-body').scrollTop = 0;
+        const captureController = new AbortController();
+        controller = captureController;
         try {
             const [blob, capabilities] = await Promise.all([
-                window.captureReaderImage(),
-                fetch('/api/reader/status', { signal: AbortSignal.timeout(10000) }).then(responseJSON),
+                window.captureReaderImage({ signal: captureController.signal }),
+                fetch('/api/reader/status', {
+                    signal: AbortSignal.any([captureController.signal, AbortSignal.timeout(10000)]),
+                }).then(responseJSON),
             ]);
             if (!current(token)) return;
             speechAvailable = capabilities.speech;
@@ -199,6 +203,9 @@
             byId('reader-close').textContent = 'Back to Camera';
             byId('reader-actions').hidden = false;
             idleSpeech();
+        } finally {
+            captureController.abort();
+            if (controller === captureController) controller = null;
         }
     }
 

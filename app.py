@@ -171,6 +171,8 @@ socketio = SocketIO(
 _camera_lock = threading.Lock()
 _camera = None
 _current_mode = None
+_reader_frame = None
+_reader_frame_at = 0.0
 _stream_state_lock = threading.Lock()
 _stream_client_modes = {}
 _stream_thread = None
@@ -247,8 +249,10 @@ _LOCAL_ADDRESSES = _compute_local_addresses()
 
 def _release_camera():
     """Release the shared camera if it exists."""
-    global _camera, _current_mode
+    global _camera, _current_mode, _reader_frame, _reader_frame_at
     with _camera_lock:
+        _reader_frame = None
+        _reader_frame_at = 0.0
         if _camera is not None:
             try:
                 _camera.release()
@@ -292,11 +296,12 @@ def _schedule_camera_release():
 
 
 def _configure_camera(camera, profile):
-    """Apply preferred camera properties for the active stream profile."""
+    """Keep source detail for OCR; downsize frames separately for streaming."""
+    capture = max((STREAM_PROFILES["local"], profile), key=lambda p: p["width"] * p["height"])
     settings = (
         (cv2.CAP_PROP_BUFFERSIZE, 1, "buffer size"),
-        (cv2.CAP_PROP_FRAME_WIDTH, profile["width"], "width"),
-        (cv2.CAP_PROP_FRAME_HEIGHT, profile["height"], "height"),
+        (cv2.CAP_PROP_FRAME_WIDTH, capture["width"], "width"),
+        (cv2.CAP_PROP_FRAME_HEIGHT, capture["height"], "height"),
         (cv2.CAP_PROP_FPS, profile["fps"], "fps"),
     )
 
@@ -428,9 +433,27 @@ def _get_camera(mode):
     return _camera
 
 
+def _reader_snapshot():
+    """Use one retained raw frame; never open or reconfigure a second camera."""
+    with _camera_lock:
+        if _reader_frame is None or time.monotonic() - _reader_frame_at > 3:
+            raise RuntimeError("Wait for the camera to connect, then scan again.")
+        frame = _reader_frame.copy()
+    try:
+        ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    except cv2.error as exc:
+        raise RuntimeError("Could not capture the page. Please try again.") from exc
+    if not ok or jpeg is None:
+        raise RuntimeError("Could not capture the page. Please try again.")
+    return jpeg.tobytes()
+
+
+app.config["READER_FRAME_SOURCE"] = _reader_snapshot
+
+
 def _stream_frames():
     """Capture frames and emit them to connected Socket.IO stream clients."""
-    global _stream_thread
+    global _stream_thread, _reader_frame, _reader_frame_at
 
     while True:
         mode = _get_active_stream_mode()
@@ -449,8 +472,9 @@ def _stream_frames():
             cam = _get_camera(mode)
             with _camera_lock:
                 ok, frame = cam.read()
-            if not ok or frame is None:
-                raise RuntimeError("Camera frame capture failed")
+                if not ok or frame is None:
+                    raise RuntimeError("Camera frame capture failed")
+                _reader_frame, _reader_frame_at = frame, time.monotonic()
         except (RuntimeError, cv2.error) as exc:
             app.logger.error("Unable to start stream: %s", exc)
             _release_camera()
@@ -466,15 +490,22 @@ def _stream_frames():
         with _stream_state_lock:
             clients_snapshot = dict(_stream_client_modes)
 
-        # Encode once per requested quality, even when several viewers share it.
-        clients_by_quality = {}
+        # Preserve aspect ratio and encode once per delivered size and quality.
+        height, width = frame.shape[:2]
+        clients_by_profile = {}
         for sid, client_mode in clients_snapshot.items():
-            quality = STREAM_PROFILES[client_mode]["quality"]
-            clients_by_quality.setdefault(quality, []).append(sid)
-        for quality, client_sids in clients_by_quality.items():
+            target = STREAM_PROFILES[client_mode]
+            scale = min(1, target["width"] / width, target["height"] / height)
+            size = (max(1, round(width * scale)), max(1, round(height * scale)))
+            clients_by_profile.setdefault((*size, target["quality"]), []).append(sid)
+        resized = {(width, height): frame}
+        for (out_width, out_height, quality), client_sids in clients_by_profile.items():
             try:
+                size = (out_width, out_height)
+                if size not in resized:
+                    resized[size] = cv2.resize(frame, size, interpolation=cv2.INTER_AREA)
                 enc_ok, jpeg = cv2.imencode(
-                    ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality],
+                    ".jpg", resized[size], [cv2.IMWRITE_JPEG_QUALITY, quality],
                 )
             except cv2.error:
                 app.logger.exception("Unable to encode camera frame")

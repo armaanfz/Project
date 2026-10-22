@@ -82,6 +82,22 @@ def test_ocr_readiness_checks_bundled_models_without_loading_them(monkeypatch, t
     assert not reader.availability()["ocr"]
 
 
+@pytest.mark.parametrize("configured,expected", [("1", 1), ("2", 2), ("99", 4), ("0", 1), ("bad", 2)])
+def test_ocr_cpu_budget_is_bounded(monkeypatch, configured, expected):
+    monkeypatch.setattr(reader_worker.os, "cpu_count", lambda: 4)
+    monkeypatch.setenv("OCR_CPU_THREADS", configured)
+    assert reader_worker.ocr_cpu_threads() == expected
+
+
+def test_reader_reports_the_explicit_small_cpu_configuration(client, monkeypatch):
+    monkeypatch.setenv("OCR_CPU_THREADS", "2")
+    monkeypatch.setattr(reader_worker.os, "cpu_count", lambda: 4)
+    status = client.get("/api/reader/status").json
+    assert status["ocr_model"] == "PP-OCRv6 small"
+    assert status["ocr_runtime"] == "ONNX Runtime CPU"
+    assert status["ocr_threads"] == 2
+
+
 def test_recognition_keeps_paragraphs_uncertain_words_and_truncation_notice(monkeypatch):
     result = SimpleNamespace(
         txts=("The first line", "continues here.", "A new paragraph."),
@@ -194,6 +210,7 @@ def test_real_rapidocr_worker_reads_printed_text_without_tesseract(variant, monk
     assert "magnifier makes reading easier" in result["text"]
     assert "students learn" in result["text"]
     assert result["word_count"] >= 10
+    assert result["model"] == "PP-OCRv6 small"
     assert not audio
 
 

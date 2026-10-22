@@ -16,8 +16,8 @@
     audio.preload = 'auto';
     audio.preservesPitch = true;
     const preferenceKey = 'magnifier_reader_settings';
-    const colors = ['dark', 'light', 'yellow', 'blue'];
-    const speeds = [0.75, 1, 1.25, 1.5];
+    const colors = Array.from(byId('reader-colors').options, option => option.value);
+    const speeds = [0.75, 1];
     let preferences = { fontSize: 32, colors: 'dark', speed: 1 };
     try {
         const saved = JSON.parse(localStorage.getItem(preferenceKey));

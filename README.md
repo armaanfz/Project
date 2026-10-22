@@ -97,8 +97,13 @@ before the streaming resize and compression. The camera must be streaming;
 frames older than three seconds are rejected and releasing the camera clears
 the snapshot. Both local and remote viewers use the same reader controls.
 
-The reading view offers text size, four contrast combinations, and Read Aloud
-with Pause, Resume, Stop, and playback speed. Text wraps to fit the screen.
+The reading view offers text size and all 12 magnifier color/filter presets:
+white on black, black on white, yellow on black, blue on yellow, orange on black,
+green on black, purple on black, grayscale, inverted grayscale, protanopia,
+deuteranopia, and tritanopia. Grayscale and color simulations can look unchanged
+on monochrome text. Read Aloud provides Pause, Resume, Stop, and two speeds:
+Slower (0.75×) and Normal (1×). Previously saved faster speeds reset to Normal.
+Text wraps to fit the screen.
 Scan Again returns to the camera so the next page can be positioned before
 tapping Read Text. Back to Camera preserves the existing magnifier settings.
 Reader appearance and speed are saved separately; scanned text is not saved

@@ -86,7 +86,8 @@ def test_read_text_restores_camera_and_keeps_preferences(page, viewer_server, ro
     page.keyboard.press("+")
     assert page.locator("#zoom-slider").input_value() == "2"
     page.locator("#reader-larger").click()
-    page.locator("#reader-colors").select_option("yellow")
+    page.locator("#reader-filter-button").click()
+    page.locator('[data-reader-color="yellow"]').click()
     assert page.locator("#reader-size-label").inner_text() == "36 px"
     page.keyboard.press("Escape")
     page.wait_for_function("!document.getElementById('reader-dialog').open && activeFrameURLs.size === 0")
@@ -94,7 +95,7 @@ def test_read_text_restores_camera_and_keeps_preferences(page, viewer_server, ro
     assert page.locator("#zoom-slider").input_value() == "2"
     page.locator("#read-text-btn").click()
     page.wait_for_function("document.getElementById('reader-text').textContent.length > 0")
-    assert page.locator("#reader-colors").input_value() == "yellow"
+    assert page.locator('[data-reader-color="yellow"]').get_attribute("aria-pressed") == "true"
     assert page.locator("#reader-size-label").inner_text() == "36 px"
 
 

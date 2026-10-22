@@ -291,19 +291,19 @@ body, html {
     outline-offset: 2px;
 }
 
-/* Individual chip colors — by data-filter attribute */
-.filter-btn[data-filter="normal"]           { background: #3498db; color: #fff; }
-.filter-btn[data-filter="grayscale"]        { background: #7f8c8d; color: #fff; }
-.filter-btn[data-filter="inverted"]         { background: #34495e; color: #fff; }
-.filter-btn[data-filter="inverted-grayscale"] { background: #2c3e50; color: #fff; }
-.filter-btn[data-filter="blue-on-yellow"]   { background: #0033cc; color: #fff; }
-.filter-btn[data-filter="orange-on-black"]  { background: #ff6600; color: #000; }
-.filter-btn[data-filter="green-on-black"]   { background: #00ff00; color: #000; }
-.filter-btn[data-filter="yellow-on-black"]  { background: #ffdd00; color: #000; }
-.filter-btn[data-filter="purple-on-black"]  { background: #800080; color: #fff; }
-.filter-btn[data-filter="protanopia"]       { background: #e74c3c; color: #fff; }
-.filter-btn[data-filter="deuteranopia"]     { background: #2ecc71; color: #000; }
-.filter-btn[data-filter="tritanopia"]       { background: #f1c40f; color: #000; }
+/* Camera and reader chips share the same palette. */
+.filter-btn[data-filter="normal"], .filter-btn[data-reader-color="light"] { background: #3498db; color: #fff; }
+.filter-btn[data-filter="grayscale"], .filter-btn[data-reader-color="grayscale"] { background: #7f8c8d; color: #fff; }
+.filter-btn[data-filter="inverted"], .filter-btn[data-reader-color="dark"] { background: #34495e; color: #fff; }
+.filter-btn[data-filter="inverted-grayscale"], .filter-btn[data-reader-color="inverted-grayscale"] { background: #2c3e50; color: #fff; }
+.filter-btn[data-filter="blue-on-yellow"], .filter-btn[data-reader-color="blue"] { background: #0033cc; color: #fff; }
+.filter-btn[data-filter="orange-on-black"], .filter-btn[data-reader-color="orange-on-black"] { background: #ff6600; color: #000; }
+.filter-btn[data-filter="green-on-black"], .filter-btn[data-reader-color="green-on-black"] { background: #00ff00; color: #000; }
+.filter-btn[data-filter="yellow-on-black"], .filter-btn[data-reader-color="yellow"] { background: #ffdd00; color: #000; }
+.filter-btn[data-filter="purple-on-black"], .filter-btn[data-reader-color="purple-on-black"] { background: #800080; color: #fff; }
+.filter-btn[data-filter="protanopia"], .filter-btn[data-reader-color="protanopia"] { background: #e74c3c; color: #fff; }
+.filter-btn[data-filter="deuteranopia"], .filter-btn[data-reader-color="deuteranopia"] { background: #2ecc71; color: #000; }
+.filter-btn[data-filter="tritanopia"], .filter-btn[data-reader-color="tritanopia"] { background: #f1c40f; color: #000; }
 
 /* ── Adjustment sliders section ─────────────────────────────────────────────── */
 .adjustment-grid {
@@ -770,7 +770,7 @@ body, html {
         background: ButtonFace;
         forced-color-adjust: none;
     }
-    .filter-btn {
+    .filter-btn[data-filter], .filter-btn[data-reader-color] {
         border: 2px solid ButtonText;
         background: ButtonFace;
         color: ButtonText;
@@ -886,6 +886,16 @@ body, html {
     max-width: 100%;
 }
 .reader-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 28px 28px; overscroll-behavior: contain; }
+.reader-filter-menu {
+    max-width: 1000px;
+    margin: 0 auto 20px;
+    padding: 20px 24px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+}
+.reader-filter-menu .filter-btn { min-height: 48px; font-size: 16px; }
 .reader-status { font-size: var(--fs-md); line-height: 1.5; margin: 0 0 16px; }
 .reader-notice { font-size: var(--fs-md); line-height: 1.5; color: #ffe6a3; margin: 0 0 16px; }
 .reader-preview { display: block; max-width: 100%; max-height: 55vh; margin: 24px auto; border-radius: var(--radius-md); object-fit: contain; }
@@ -930,6 +940,7 @@ body, html {
     .reader-panel .btn, .reader-panel select { font-size: 16px; padding: 10px 14px; }
     .reader-field { font-size: 16px; flex-wrap: wrap; }
     .reader-body { padding: 16px; }
+    .reader-filter-menu { padding: 14px 16px; }
     .reader-text { padding: 16px; }
 }
 @media (max-height: 400px) {

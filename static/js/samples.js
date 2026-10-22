@@ -1370,7 +1370,7 @@ if (_maskRadiusEl) {
 document.addEventListener('DOMContentLoaded', () => {
   setupBarsMaskFeature();
   _restoreSettings();
-  if (!document.querySelector('.filter-btn.active')) {
+  if (!document.querySelector('.filter-btn[data-filter].active')) {
     _setActiveFilterBtn('normal');
   }
   updateMaskButton();

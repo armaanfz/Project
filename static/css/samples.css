@@ -293,7 +293,7 @@ body, html {
 
 /* Camera and reader chips share the same palette. */
 .filter-btn[data-filter="normal"], .filter-btn[data-reader-color="light"] { background: #3498db; color: #fff; }
-.filter-btn[data-filter="grayscale"], .filter-btn[data-reader-color="grayscale"] { background: #7f8c8d; color: #fff; }
+.filter-btn[data-filter="grayscale"] { background: #7f8c8d; color: #fff; }
 .filter-btn[data-filter="inverted"], .filter-btn[data-reader-color="dark"] { background: #34495e; color: #fff; }
 .filter-btn[data-filter="inverted-grayscale"], .filter-btn[data-reader-color="inverted-grayscale"] { background: #2c3e50; color: #fff; }
 .filter-btn[data-filter="blue-on-yellow"], .filter-btn[data-reader-color="blue"] { background: #0033cc; color: #fff; }
@@ -301,9 +301,9 @@ body, html {
 .filter-btn[data-filter="green-on-black"], .filter-btn[data-reader-color="green-on-black"] { background: #00ff00; color: #000; }
 .filter-btn[data-filter="yellow-on-black"], .filter-btn[data-reader-color="yellow"] { background: #ffdd00; color: #000; }
 .filter-btn[data-filter="purple-on-black"], .filter-btn[data-reader-color="purple-on-black"] { background: #800080; color: #fff; }
-.filter-btn[data-filter="protanopia"], .filter-btn[data-reader-color="protanopia"] { background: #e74c3c; color: #fff; }
-.filter-btn[data-filter="deuteranopia"], .filter-btn[data-reader-color="deuteranopia"] { background: #2ecc71; color: #000; }
-.filter-btn[data-filter="tritanopia"], .filter-btn[data-reader-color="tritanopia"] { background: #f1c40f; color: #000; }
+.filter-btn[data-filter="protanopia"] { background: #e74c3c; color: #fff; }
+.filter-btn[data-filter="deuteranopia"] { background: #2ecc71; color: #000; }
+.filter-btn[data-filter="tritanopia"] { background: #f1c40f; color: #000; }
 
 /* ── Adjustment sliders section ─────────────────────────────────────────────── */
 .adjustment-grid {
@@ -912,21 +912,13 @@ body, html {
     user-select: text;
 }
 .reader-text[data-colors="light"],
-.reader-text[data-colors="grayscale"],
-.reader-text[data-colors="inverted-grayscale"],
-.reader-text[data-colors="protanopia"],
-.reader-text[data-colors="deuteranopia"],
-.reader-text[data-colors="tritanopia"] { background: #fff; color: #111; }
+.reader-text[data-colors="inverted-grayscale"] { background: #fff; color: #111; }
 .reader-text[data-colors="yellow"] { background: #0a0a0a; color: #ffe45c; }
 .reader-text[data-colors="blue"] { background: #fff29b; color: #082567; }
 .reader-text[data-colors="orange-on-black"] { color: #ff9b54; }
 .reader-text[data-colors="green-on-black"] { color: #66ff99; }
 .reader-text[data-colors="purple-on-black"] { color: #d3a0ff; }
-.reader-text[data-colors="grayscale"] { filter: grayscale(100%); }
 .reader-text[data-colors="inverted-grayscale"] { filter: grayscale(100%) invert(100%); }
-.reader-text[data-colors="protanopia"] { filter: url(#filter-protanopia); }
-.reader-text[data-colors="deuteranopia"] { filter: url(#filter-deuteranopia); }
-.reader-text[data-colors="tritanopia"] { filter: url(#filter-tritanopia); }
 .reader-actions { border-top: 1px solid var(--reader-border); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
 .reader-primary { border-color: var(--accent-color); box-shadow: inset 0 0 0 1px var(--accent-color); }
 @media (max-width: 700px) {

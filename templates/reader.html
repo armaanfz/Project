@@ -13,22 +13,7 @@
             <output id="reader-size-label" aria-live="polite">32 px</output>
             <button type="button" class="btn" id="reader-larger" aria-label="Increase text size">A+</button>
         </div>
-        <label class="reader-field" for="reader-colors">Colors
-            <select id="reader-colors">
-                <option value="dark">White on black</option>
-                <option value="light">Black on white</option>
-                <option value="yellow">Yellow on black</option>
-                <option value="blue">Blue on yellow</option>
-                <option value="orange-on-black">Orange on black</option>
-                <option value="green-on-black">Green on black</option>
-                <option value="purple-on-black">Purple on black</option>
-                <option value="grayscale">Grayscale</option>
-                <option value="inverted-grayscale">Inverted grayscale</option>
-                <option value="protanopia">Protanopia</option>
-                <option value="deuteranopia">Deuteranopia</option>
-                <option value="tritanopia">Tritanopia</option>
-            </select>
-        </label>
+        <button type="button" class="btn" id="reader-filter-button" aria-expanded="false" aria-controls="reader-colors">Filters</button>
         <label class="reader-field" for="reader-speed">Reading speed
             <select id="reader-speed">
                 <option value="0.75">Slower</option>
@@ -38,6 +23,19 @@
     </div>
 
     <div class="reader-body" id="reader-body">
+        <section id="reader-colors" class="reader-filter-menu" aria-labelledby="reader-colors-title" hidden>
+            <p class="menu-section-title" id="reader-colors-title">Color Filters</p>
+            <div class="filter-chip-grid" role="group" aria-label="Reader color filters">
+                <button type="button" class="filter-btn" data-reader-color="light" aria-pressed="false">Black on White</button>
+                <button type="button" class="filter-btn" data-reader-color="dark" aria-pressed="false">White on Black</button>
+                <button type="button" class="filter-btn" data-reader-color="inverted-grayscale" aria-pressed="false">Inverted Grayscale</button>
+                <button type="button" class="filter-btn" data-reader-color="blue" aria-pressed="false">Blue on Yellow</button>
+                <button type="button" class="filter-btn" data-reader-color="orange-on-black" aria-pressed="false">Orange on Black</button>
+                <button type="button" class="filter-btn" data-reader-color="green-on-black" aria-pressed="false">Green on Black</button>
+                <button type="button" class="filter-btn" data-reader-color="yellow" aria-pressed="false">Yellow on Black</button>
+                <button type="button" class="filter-btn" data-reader-color="purple-on-black" aria-pressed="false">Purple on Black</button>
+            </div>
+        </section>
         <p id="reader-status" class="reader-status" role="status" aria-live="polite" aria-atomic="true"></p>
         <img id="reader-preview" class="reader-preview" alt="Captured page" hidden>
         <p id="reader-notice" class="reader-notice" hidden></p>

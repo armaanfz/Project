@@ -97,17 +97,21 @@ before the streaming resize and compression. The camera must be streaming;
 frames older than three seconds are rejected and releasing the camera clears
 the snapshot. Both local and remote viewers use the same reader controls.
 
-The reading view offers text size and all 12 magnifier color/filter presets:
+The reading view offers text size and a Filters button styled like the camera
+menu. The selected filter is outlined; choosing a filter closes the panel to
+show the text. Eight reader presets are available:
 white on black, black on white, yellow on black, blue on yellow, orange on black,
-green on black, purple on black, grayscale, inverted grayscale, protanopia,
-deuteranopia, and tritanopia. Grayscale and color simulations can look unchanged
-on monochrome text. Read Aloud provides Pause, Resume, Stop, and two speeds:
+green on black, purple on black, and inverted grayscale. The main camera menu
+retains all 12 filters, including grayscale, protanopia, deuteranopia, and
+tritanopia. Saved reader selections for these four removed presets reset to
+white on black. Read Aloud provides Pause, Resume, Stop, and two speeds:
 Slower (0.75×) and Normal (1×). Previously saved faster speeds reset to Normal.
 Text wraps to fit the screen.
 Scan Again returns to the camera so the next page can be positioned before
 tapping Read Text. Back to Camera preserves the existing magnifier settings.
 Reader appearance and speed are saved separately; scanned text is not saved
-to browser storage. Escape closes the dialog and restores focus to Read Text.
+to browser storage. Escape closes the filter panel first when it is open;
+otherwise it closes the reader and restores focus to Read Text.
 
 Text recognition uses **RapidOCR with bundled PP-OCRv6 small neural models**. Both
 the text detector and recognizer explicitly select the small variant and ONNX

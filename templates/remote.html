@@ -75,7 +75,7 @@
         <button class="ctrl-btn" id="mask-btn" aria-pressed="false" aria-label="Toggle reading mask">Mask</button>
         <div class="ctrl-divider" aria-hidden="true"></div>
         <button class="ctrl-btn" id="center-btn" aria-label="Center the view" style="display:none;">Center</button>
-        <button class="ctrl-btn" id="reset-btn" aria-label="Reset zoom to default" style="display:none;">Reset Zoom</button>
+        <button class="ctrl-btn" id="reset-btn" aria-label="Reset zoom to default" >Reset Zoom</button>
     </section>
 
     <!-- Mask controls sheet (shown above control bar when mask is active) -->
@@ -85,6 +85,7 @@
             <input type="range" id="mask-radius" min="0" max="48" value="5" aria-label="Mask bar size percentage" />
         </div>
         <div class="mask-btn-row">
+            <button type="button" class="mask-option-btn" id="mask-reset-btn">Reset</button>
             <button class="mask-option-btn" id="mask-orientation-btn" aria-label="Horizontal mask orientation">Horizontal</button>
             <button class="mask-option-btn" id="mask-vertical-btn" aria-label="Vertical mask orientation">Vertical</button>
             <button class="mask-option-btn" id="mask-invert-btn" aria-label="Invert mask">Invert</button>

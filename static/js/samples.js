@@ -7,7 +7,6 @@ let readerRemoteFrame = null;
 
 // WeakSet used by _ensureMaskUIExists to track which mask buttons already have
 // their event listener attached, without polluting DOM element properties.
-document.getElementById('reset-btn')?.addEventListener('click', resetAllSettings);
 const _barsMaskHookedButtons = new WeakSet();
 const videoContainer = document.getElementById('video-container');
 const menu = document.getElementById('menu');

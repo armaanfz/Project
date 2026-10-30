@@ -86,8 +86,10 @@ def test_read_text_restores_camera_and_keeps_preferences(page, viewer_server, ro
     page.keyboard.press("+")
     assert page.locator("#zoom-slider").input_value() == "2"
     page.locator("#reader-larger").click()
-    page.locator("#reader-filter-button").click()
+    assert page.locator("#reader-filter-button, #reader-speed").count() == 0
+    assert page.locator('#reader-settings [data-reader-color="yellow"]').is_visible()
     page.locator('[data-reader-color="yellow"]').click()
+    page.locator('[data-reader-speed="0.75"]').click()
     assert page.locator("#reader-size-label").inner_text() == "36 px"
     page.keyboard.press("Escape")
     page.wait_for_function("!document.getElementById('reader-dialog').open && activeFrameURLs.size === 0")
@@ -96,6 +98,7 @@ def test_read_text_restores_camera_and_keeps_preferences(page, viewer_server, ro
     page.locator("#read-text-btn").click()
     page.wait_for_function("document.getElementById('reader-text').textContent.length > 0")
     assert page.locator('[data-reader-color="yellow"]').get_attribute("aria-pressed") == "true"
+    assert page.locator('[data-reader-speed="0.75"]').get_attribute("aria-pressed") == "true"
     assert page.locator("#reader-size-label").inner_text() == "36 px"
 
 
@@ -201,7 +204,9 @@ def test_piper_recording_supports_pause_resume_speed_and_cleanup(page, viewer_se
     page.locator("#reader-pause").click()
     assert page.evaluate("testReaderAudio.paused")
     assert page.locator("#reader-pause").inner_text() == "Resume"
-    page.locator("#reader-speed").select_option("0.75")
+    page.locator('[data-reader-speed="0.75"]').click()
+    assert page.locator('[data-reader-speed="0.75"]').get_attribute("aria-pressed") == "true"
+    assert page.locator('[data-reader-speed="1"]').get_attribute("aria-pressed") == "false"
     assert page.evaluate("testReaderAudio.playbackRate") == 0.75
     page.locator("#reader-pause").click()
     page.wait_for_function("!testReaderAudio.paused")

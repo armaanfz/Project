@@ -12,9 +12,8 @@
     const speak = byId('reader-speak');
     const pause = byId('reader-pause');
     const stop = byId('reader-stop');
-    const filterButton = byId('reader-filter-button');
-    const filterMenu = byId('reader-colors');
-    const colorButtons = Array.from(filterMenu.querySelectorAll('[data-reader-color]'));
+    const colorButtons = Array.from(byId('reader-colors').querySelectorAll('[data-reader-color]'));
+    const speedButtons = Array.from(dialog.querySelectorAll('[data-reader-speed]'));
     const audio = new Audio();
     audio.preload = 'auto';
     audio.preservesPitch = true;
@@ -49,20 +48,15 @@
             button.classList.toggle('active', selected);
             button.setAttribute('aria-pressed', String(selected));
         });
-        byId('reader-speed').value = String(preferences.speed);
+        speedButtons.forEach(button => {
+            const selected = Number(button.dataset.readerSpeed) === preferences.speed;
+            button.classList.toggle('active', selected);
+            button.setAttribute('aria-pressed', String(selected));
+        });
         audio.playbackRate = preferences.speed;
         try { localStorage.setItem(preferenceKey, JSON.stringify(preferences)); } catch (_) { /* optional */ }
     }
     applyPreferences();
-
-    function setFiltersOpen(open) {
-        filterMenu.hidden = !open;
-        filterButton.setAttribute('aria-expanded', String(open));
-        if (open) {
-            byId('reader-body').scrollTop = 0;
-            filterMenu.querySelector('[aria-pressed="true"]').focus();
-        }
-    }
 
     function message(value) { status.textContent = value; }
     function current(token) { return token === operation && dialog.open; }
@@ -286,7 +280,6 @@
         cancelOperation();
         clearAudio();
         clearPreview();
-        setFiltersOpen(false);
         text.textContent = '';
         trigger.setAttribute('aria-expanded', 'false');
     }
@@ -295,10 +288,7 @@
     dialog.addEventListener('close', () => { cleanup(); trigger.focus(); });
     dialog.addEventListener('cancel', event => {
         event.preventDefault();
-        if (!filterMenu.hidden) {
-            setFiltersOpen(false);
-            filterButton.focus();
-        } else closeReader();
+        closeReader();
     });
     window.addEventListener('pagehide', () => { closeReader(); cleanup(); });
     trigger.addEventListener('click', openReader);
@@ -319,12 +309,12 @@
     });
     byId('reader-smaller').addEventListener('click', () => { preferences.fontSize = Math.max(24, preferences.fontSize - 4); applyPreferences(); });
     byId('reader-larger').addEventListener('click', () => { preferences.fontSize = Math.min(96, preferences.fontSize + 4); applyPreferences(); });
-    filterButton.addEventListener('click', () => setFiltersOpen(filterMenu.hidden));
     colorButtons.forEach(button => button.addEventListener('click', () => {
         preferences.colors = button.dataset.readerColor;
         applyPreferences();
-        setFiltersOpen(false);
-        filterButton.focus();
     }));
-    byId('reader-speed').addEventListener('change', event => { preferences.speed = Number(event.target.value); applyPreferences(); });
+    speedButtons.forEach(button => button.addEventListener('click', () => {
+        preferences.speed = Number(button.dataset.readerSpeed);
+        applyPreferences();
+    }));
 })();

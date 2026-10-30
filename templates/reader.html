@@ -13,17 +13,12 @@
             <output id="reader-size-label" aria-live="polite">32 px</output>
             <button type="button" class="btn" id="reader-larger" aria-label="Increase text size">A+</button>
         </div>
-        <button type="button" class="btn" id="reader-filter-button" aria-expanded="false" aria-controls="reader-colors">Filters</button>
-        <label class="reader-field" for="reader-speed">Reading speed
-            <select id="reader-speed">
-                <option value="0.75">Slower</option>
-                <option value="1" selected>Normal</option>
-            </select>
-        </label>
-    </div>
-
-    <div class="reader-body" id="reader-body">
-        <section id="reader-colors" class="reader-filter-menu" aria-labelledby="reader-colors-title" hidden>
+        <div class="reader-speed" role="group" aria-labelledby="reader-speed-label">
+            <span id="reader-speed-label">Reading speed</span>
+            <button type="button" class="btn" data-reader-speed="0.75" aria-pressed="false">Slower</button>
+            <button type="button" class="btn" data-reader-speed="1" aria-pressed="true">Normal</button>
+        </div>
+        <section id="reader-colors" class="reader-filters" aria-labelledby="reader-colors-title">
             <p class="menu-section-title" id="reader-colors-title">Color Filters</p>
             <div class="filter-chip-grid" role="group" aria-label="Reader color filters">
                 <button type="button" class="filter-btn" data-reader-color="light" aria-pressed="false">Black on White</button>
@@ -36,6 +31,9 @@
                 <button type="button" class="filter-btn" data-reader-color="purple-on-black" aria-pressed="false">Purple on Black</button>
             </div>
         </section>
+    </div>
+
+    <div class="reader-body" id="reader-body">
         <p id="reader-status" class="reader-status" role="status" aria-live="polite" aria-atomic="true"></p>
         <img id="reader-preview" class="reader-preview" alt="Captured page" hidden>
         <p id="reader-notice" class="reader-notice" hidden></p>

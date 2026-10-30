@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Magnifier – A web app to help students read small text more comfortably with zoom, color filters, and a focus mask. Built for partially visually impaired students.">
     <title>Magnifier</title>
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/magnifier.png') }}">
     <!-- G: restore saved accent colour before CSS loads to avoid flash of default colour -->
     <script>
     (function(){
@@ -42,7 +42,7 @@
     <aside class="quick-start" aria-label="Quick start">
         <h2>Ready to Read?</h2>
         <p>When you are ready, click the button below to start using the Magnifier.</p>
-        <button class="start-btn" id="start-samples-btn" data-samples-url="{{ url_for('samples') }}">Start Magnifier</button>
+        <button class="start-btn start-btn--primary" id="start-samples-btn" data-samples-url="{{ url_for('samples') }}">Start Magnifier</button>
         <button class="start-btn" id="start-tutorial-btn" data-tutorial-url="{{ url_for('samples') }}?tutorial=1">Tutorial</button>
         <button class="start-btn" id="start-remote-btn" data-remote-url="{{ url_for('remote') }}">Access Remote Stream</button>
         <div class="accent-picker-row">
@@ -53,11 +53,12 @@
         <div id="tunnel-box" aria-live="polite">
             <p class="tunnel-label">Remote Access URL</p>
             <p id="tunnel-url-text">Starting tunnel...</p>
-            <button type="button" id="tunnel-qr-btn" style="display:none" aria-label="Show QR code for remote access URL">Show QR Code</button>
+            <button type="button" id="tunnel-qr-btn" aria-label="Show QR code for remote access URL">Show QR Code</button>
             <div id="tunnel-qr-box" hidden>
                 <img id="tunnel-qr-image" alt="QR code for the remote access URL">
             </div>
         </div>
+        <div class="shutdown-divider" aria-hidden="true"><span>System</span></div>
         <button type="button" class="shutdown-btn" id="shutdown-btn" aria-label="Shut down Raspberry Pi">Shut Down</button>
     </aside>
 </div>
@@ -82,7 +83,9 @@
           ? "Shutdown is only available from the Raspberry Pi itself."
           : res.status === 429
             ? "Shutdown was requested recently. Please wait a moment and try again."
-            : "Server returned " + res.status + ".";
+            : res.status === 501
+              ? "Shutdown is only supported on Raspberry Pi."
+              : "Server returned " + res.status + ".";
         alert("Shutdown failed: " + message);
         return;
       }
@@ -111,27 +114,41 @@
   }
 
   function pollTunnel() {
-    fetch('/tunnel-status')
-      .then(function(res) { return res.json(); })
+    var nextPollDelay = 5000;
+    fetch('/tunnel-status', { cache: 'no-store' })
+      .then(function(res) {
+        if (!res.ok) throw new Error('Tunnel status unavailable');
+        return res.json();
+      })
       .then(function(data) {
-        if (data.status === 'ready') {
-          var a = document.createElement('a');
-          a.href = data.url;
-          a.textContent = data.url;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          tunnelUrlText.replaceChildren(a);
+        if (data.status === 'ready' && data.url) {
+          var currentLink = tunnelUrlText.querySelector('a');
+          if (!currentLink || currentLink.getAttribute('href') !== data.url) {
+            hideQr();
+            var a = document.createElement('a');
+            a.href = data.url;
+            a.textContent = data.url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            tunnelUrlText.replaceChildren(a);
+          }
           tunnelQrBtn.style.display = 'block';
-        } else if (data.status === 'error') {
-          tunnelUrlText.textContent = 'Tunnel unavailable';
+        } else {
+          tunnelUrlText.textContent = data.status === 'disabled'
+            ? 'Remote access is disabled'
+            : data.status === 'starting' ? 'Starting tunnel...' : 'Tunnel unavailable';
           tunnelQrBtn.style.display = 'none';
           hideQr();
-        } else {
-          setTimeout(pollTunnel, 2000);
+          if (data.status === 'starting') nextPollDelay = 2000;
         }
       })
       .catch(function() {
-        setTimeout(pollTunnel, 2000);
+        tunnelUrlText.textContent = 'Unable to reach the server. Retrying...';
+        tunnelQrBtn.style.display = 'none';
+        hideQr();
+      })
+      .finally(function() {
+        setTimeout(pollTunnel, nextPollDelay);
       });
   }
 

@@ -1,0 +1,51 @@
+<dialog id="reader-dialog" class="reader-panel" aria-labelledby="reader-title">
+    <header class="reader-header">
+        <div>
+            <p class="menu-section-title">Magnifier</p>
+            <h1 id="reader-title">Read Text</h1>
+        </div>
+        <button type="button" class="btn" id="reader-close" autofocus>Back to Camera</button>
+    </header>
+
+    <div class="reader-settings" id="reader-settings" hidden>
+        <div class="reader-size" role="group" aria-label="Text size">
+            <button type="button" class="btn" id="reader-smaller" aria-label="Decrease text size">A−</button>
+            <output id="reader-size-label" aria-live="polite">32 px</output>
+            <button type="button" class="btn" id="reader-larger" aria-label="Increase text size">A+</button>
+        </div>
+        <button type="button" class="btn" id="reader-filter-button" aria-expanded="false" aria-controls="reader-colors">Filters</button>
+        <label class="reader-field" for="reader-speed">Reading speed
+            <select id="reader-speed">
+                <option value="0.75">Slower</option>
+                <option value="1" selected>Normal</option>
+            </select>
+        </label>
+    </div>
+
+    <div class="reader-body" id="reader-body">
+        <section id="reader-colors" class="reader-filter-menu" aria-labelledby="reader-colors-title" hidden>
+            <p class="menu-section-title" id="reader-colors-title">Color Filters</p>
+            <div class="filter-chip-grid" role="group" aria-label="Reader color filters">
+                <button type="button" class="filter-btn" data-reader-color="light" aria-pressed="false">Black on White</button>
+                <button type="button" class="filter-btn" data-reader-color="dark" aria-pressed="false">White on Black</button>
+                <button type="button" class="filter-btn" data-reader-color="inverted-grayscale" aria-pressed="false">Inverted Grayscale</button>
+                <button type="button" class="filter-btn" data-reader-color="blue" aria-pressed="false">Blue on Yellow</button>
+                <button type="button" class="filter-btn" data-reader-color="orange-on-black" aria-pressed="false">Orange on Black</button>
+                <button type="button" class="filter-btn" data-reader-color="green-on-black" aria-pressed="false">Green on Black</button>
+                <button type="button" class="filter-btn" data-reader-color="yellow" aria-pressed="false">Yellow on Black</button>
+                <button type="button" class="filter-btn" data-reader-color="purple-on-black" aria-pressed="false">Purple on Black</button>
+            </div>
+        </section>
+        <p id="reader-status" class="reader-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <img id="reader-preview" class="reader-preview" alt="Captured page" hidden>
+        <p id="reader-notice" class="reader-notice" hidden></p>
+        <article id="reader-text" class="reader-text" tabindex="0" aria-label="Recognized text" hidden></article>
+    </div>
+
+    <footer class="reader-actions" id="reader-actions" hidden>
+        <button type="button" class="btn reader-primary" id="reader-speak" disabled>Read Aloud</button>
+        <button type="button" class="btn" id="reader-pause" hidden>Pause</button>
+        <button type="button" class="btn" id="reader-stop" hidden>Stop</button>
+        <button type="button" class="btn" id="reader-rescan">Scan Again</button>
+    </footer>
+</dialog>

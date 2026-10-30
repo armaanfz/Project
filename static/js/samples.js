@@ -51,6 +51,33 @@ const FILTER_ACTIONS = Object.freeze({
 const _SETTINGS_KEY = 'magnifier_settings';
 let _settingsReady = false;
 
+function resetAllSettings() {
+    
+    const normalBtn = document.querySelector('.filter-btn[data-filter="normal"]');
+    if (normalBtn) normalBtn.click();
+
+   
+    const hueSlider = document.getElementById('hue');
+    const brightnessSlider = document.getElementById('brightness');
+    const contrastSlider = document.getElementById('contrast');
+    const saturationSlider = document.getElementById('saturation');
+
+    if (hueSlider) hueSlider.value = 0;
+    if (brightnessSlider) brightnessSlider.value = 100;
+    if (contrastSlider) contrastSlider.value = 100;
+    if (saturationSlider) saturationSlider.value = 100;
+
+    
+    [hueSlider, brightnessSlider, contrastSlider, saturationSlider].forEach(slider => {
+        if (slider) slider.dispatchEvent(new Event('input'));
+    });
+
+    
+    _saveSettings();
+}
+
+
+
 function _saveSettings() {
     // Initialization also updates controls; wait until saved values are restored.
     if (!_settingsReady) return;
@@ -146,14 +173,34 @@ function wireTouchFriendlyRangeInput(input) {
   input.dataset.touchGuardWired = 'true';
 }
 
-const orientationBtn = document.getElementById('mask-orientation-btn');
-if (orientationBtn) {
-  orientationBtn.addEventListener('click', () => {
-    _barsMaskState.orientation = 'horizontal';
-    updateMaskOrientationButton();
-    drawBarsMask();
-    _saveSettings();
-  });
+// Reset Reading Mask to default settings
+const maskResetBtn = document.getElementById('mask-reset-btn');
+
+if (maskResetBtn) {
+    maskResetBtn.addEventListener('click', () => {
+
+        // 1. Restore default mask settings
+        _barsMaskState.barPct = _DEFAULT_MASK_STATE.barPct;
+        _barsMaskState.orientation = _DEFAULT_MASK_STATE.orientation;
+        _barsMaskState.inverted = _DEFAULT_MASK_STATE.inverted;
+
+        // 2. Reset the slider position
+        const maskSlider = document.getElementById('mask-radius');
+
+        if (maskSlider) {
+            maskSlider.value = _DEFAULT_MASK_STATE.barPct;
+        }
+
+        // 3. Update button appearances
+        updateMaskOrientationButton();
+        updateMaskInvertButton();
+
+        // 4. Redraw the reading mask
+        drawBarsMask();
+
+        // 5. Save reset settings
+        _saveSettings();
+    });
 }
 
 const verticalBtn = document.getElementById('mask-vertical-btn');
@@ -164,6 +211,17 @@ if (verticalBtn) {
     drawBarsMask();
     _saveSettings();
   });
+}
+
+const horizontalBtn = document.getElementById('mask-orientation-btn');
+
+if (horizontalBtn) {
+    horizontalBtn.addEventListener('click', () => {
+        _barsMaskState.orientation = 'horizontal';
+        updateMaskOrientationButton();
+        drawBarsMask();
+        _saveSettings();
+    });
 }
 
 function updateMaskOrientationButton() {

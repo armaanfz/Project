@@ -17,7 +17,12 @@ env/
 
 # Downloaded binaries
 cloudflared
+cloudflared.exe
 caddy.exe
 
 # Reports
 .reports/
+.pytest_cache/
+
+# Downloaded neural speech models (installed per device)
+models/

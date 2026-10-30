@@ -1,6 +1,10 @@
 Flask>=3.0.0
 flask-socketio>=5.3.0
-opencv-python-headless>=4.8.0
+opencv-python-headless>=4.8.0,<5
 gevent>=23.0.0
 gevent-websocket>=0.10.1
 qrcode[pil]>=7.4.2
+# Bundles PP-OCRv6 SMALL detection/recognition and the orientation classifier.
+# Keep this pin: scans load these exact local files without runtime downloads.
+rapidocr==3.10.0
+onnxruntime>=1.20,<2

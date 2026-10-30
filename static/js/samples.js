@@ -213,6 +213,17 @@ if (verticalBtn) {
   });
 }
 
+const horizontalBtn = document.getElementById('mask-orientation-btn');
+
+if (horizontalBtn) {
+    horizontalBtn.addEventListener('click', () => {
+        _barsMaskState.orientation = 'horizontal';
+        updateMaskOrientationButton();
+        drawBarsMask();
+        _saveSettings();
+    });
+}
+
 function updateMaskOrientationButton() {
   const hBtn = document.getElementById('mask-orientation-btn');
   const vBtn = document.getElementById('mask-vertical-btn');

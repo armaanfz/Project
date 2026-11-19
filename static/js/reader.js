@@ -17,6 +17,7 @@
     const audio = new Audio();
     audio.preload = 'auto';
     audio.preservesPitch = true;
+    const voiceUnavailable = 'Read Aloud is not available. Check the voice setup on the device running Magnifier.';
     const preferenceKey = 'magnifier_reader_settings';
     const colors = colorButtons.map(button => button.dataset.readerColor);
     const speeds = [0.75, 1];
@@ -109,6 +110,36 @@
         return value;
     }
 
+    function readerStatus(signal = AbortSignal.timeout(10000)) {
+        return fetch('/api/reader/status', { signal }).then(responseJSON);
+    }
+
+    function showReaderNotice(scanNotes, voiceNote = '') {
+        notice.textContent = [...scanNotes, voiceNote].filter(Boolean).join(' ');
+        notice.hidden = !notice.textContent;
+    }
+
+    async function waitForVoice(token, notes) {
+        // The first-run download belongs to the server, not to this scan.
+        const deadline = Date.now() + 300000;
+        while (current(token) && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            if (!current(token)) return;
+            try {
+                const capabilities = await readerStatus();
+                if (!current(token)) return;
+                if (capabilities.speech) {
+                    speechAvailable = true;
+                    showReaderNotice(notes);
+                    idleSpeech();
+                    return;
+                }
+                if (capabilities.speech_setup !== 'preparing') break;
+            } catch (_) { /* Retry a temporary connection failure. */ }
+        }
+        if (current(token)) showReaderNotice(notes, voiceUnavailable);
+    }
+
     async function runJob(path, options, token, withAudio = false) {
         // Keep the short submission alive on Cancel so a late job ID can still
         // be deleted. Only polling/audio downloads use the operation controller.
@@ -172,9 +203,7 @@
         try {
             const [blob, capabilities] = await Promise.all([
                 window.captureReaderImage({ signal: captureController.signal }),
-                fetch('/api/reader/status', {
-                    signal: AbortSignal.any([captureController.signal, AbortSignal.timeout(10000)]),
-                }).then(responseJSON),
+                readerStatus(AbortSignal.any([captureController.signal, AbortSignal.timeout(10000)])),
             ]);
             if (!current(token)) return;
             speechAvailable = capabilities.speech;
@@ -200,9 +229,11 @@
             const notes = [];
             if (result.truncated) notes.push('This scan is too long to show in full. Scan a smaller area.');
             else if (result.uncertain) notes.push('Some words may be incorrect. Check them against the page.');
-            if (!speechAvailable) notes.push('Read Aloud is not available on this device yet.');
-            notice.textContent = notes.join(' ');
-            notice.hidden = !notes.length;
+            if (speechAvailable) showReaderNotice(notes);
+            else if (capabilities.speech_setup === 'preparing') {
+                showReaderNotice(notes, 'Setting up the voice for Read Aloud. You can read the text while it finishes.');
+                void waitForVoice(token, notes);
+            } else showReaderNotice(notes, voiceUnavailable);
             message('Text ready.');
             idleSpeech();
             text.focus();

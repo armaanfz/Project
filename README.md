@@ -97,9 +97,9 @@ before the streaming resize and compression. The camera must be streaming;
 frames older than three seconds are rejected and releasing the camera clears
 the snapshot. Both local and remote viewers use the same reader controls.
 
-The reading view offers text size and a Filters button styled like the camera
-menu. The selected filter is outlined; choosing a filter closes the panel to
-show the text. Eight reader presets are available:
+The reading view offers text size, filter buttons, and reading speed directly
+in the toolbar. The selected filter and speed are outlined. Eight reader presets
+are available:
 white on black, black on white, yellow on black, blue on yellow, orange on black,
 green on black, purple on black, and inverted grayscale. The main camera menu
 retains all 12 filters, including grayscale, protanopia, deuteranopia, and
@@ -110,8 +110,7 @@ Text wraps to fit the screen.
 Scan Again returns to the camera so the next page can be positioned before
 tapping Read Text. Back to Camera preserves the existing magnifier settings.
 Reader appearance and speed are saved separately; scanned text is not saved
-to browser storage. Escape closes the filter panel first when it is open;
-otherwise it closes the reader and restores focus to Read Text.
+to browser storage. Escape closes the reader and restores focus to Read Text.
 
 Text recognition uses **RapidOCR with bundled PP-OCRv6 small neural models**. Both
 the text detector and recognizer explicitly select the small variant and ONNX
@@ -134,7 +133,7 @@ a recording takes time; the UI shows progress and lets the user stop.
 
 Activate the same virtual environment used to start `app.py` (or the Pi service).
 On the Pi, use a 64-bit OS. After pulling the updated `remote-feed` branch, install
-the dependencies and restart the app to enable **Read Text**:
+the dependencies and restart the app to enable **Read Text** and **Read Aloud**:
 
 ```sh
 python -m pip install -r requirements.txt
@@ -148,19 +147,21 @@ Raspberry Pi 5 (8 GB), run `python scripts/check_ocr.py path/to/page.jpg`.
 Timing includes a fresh worker and model load, as each app scan does. Desktop
 results do not establish Pi scan speed. Neither check downloads OCR models.
 
-To enable **Read Aloud** as well, run these commands instead. They install the
-same OCR dependencies plus Piper and download its voice:
+The normal install also installs Piper. On startup, `app.py` downloads the
+default voice and configuration to `models/` in the background if they are
+missing. The app verifies the download against the voice registry and enables
+Read Aloud when the files are ready. The camera and Read Text keep working
+during setup. The first download needs Internet access and write permission to
+`models/` (or to create that directory). To install the files in advance, or
+retry a failed download, run:
 
 ```sh
-python -m pip install -r requirements-reader.txt
 python scripts/setup_reader.py
 ```
 
-Setup downloads the default voice and configuration to `models/`, checks their
-sizes and checksums against the upstream voice registry, and retains the model
-card. Restart the app/service afterward. Voice files are excluded from Git.
-Package installation and the voice download require Internet access; the installed OCR and voice engines
-run locally without an external OCR/TTS API or API key. ONNX Runtime telemetry
+Voice files are excluded from Git. Once installed, the OCR and voice engines
+run locally without an external OCR/TTS API or API key. Pages and text are
+never sent to the voice download server. ONNX Runtime telemetry
 is disabled before inference. Existing remote viewing still uses the tunnel
 and the viewer's existing Socket.IO dependency.
 
@@ -177,14 +178,17 @@ when using automatic startup; shell settings alone do not reach that service.
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `PIPER_MODEL` | `models/en_US-lessac-medium.onnx` relative to the app directory | Local neural voice model. |
+| `PIPER_AUTO_DOWNLOAD` | enabled | Set to `0` to skip the startup download and use preinstalled voice files. Setting `PIPER_MODEL` also skips the download. |
 | `OCR_CPU_THREADS` | `2` | OCR CPU thread budget, clamped to 1–4 and available cores. Set `1` if streaming needs more CPU time. Speech remains at one thread. |
 
 If dependencies are missing, the viewer remains usable and the reader shows a
 unavailable message. `GET /api/reader/status` checks for the OCR package, its bundled
 models, the CPU runtime, and the speech package/model files. It also reports
-`ocr_model`, `ocr_runtime`, and `ocr_threads` for deployment checks. If `ocr` is false,
+`ocr_model`, `ocr_runtime`, `ocr_threads`, and `speech_setup` for deployment checks. If `ocr` is false,
 reinstall `requirements.txt` in the Python environment that actually runs the app
-and restart it. The status does not prove camera accuracy or voice quality on the Pi.
+and restart it. If `speech_setup` is `failed`, check the server log and run
+`python scripts/setup_reader.py` in that environment. The status does not prove
+camera accuracy or voice quality on the Pi.
 
 ### Processing and limits
 
@@ -270,8 +274,8 @@ Reader browser tests cover both camera sources, the exact zoom/pan crop,
 unfiltered snapshots, plain-text rendering, cancellation, neural-audio playback
 controls, and layouts at 1280×720, 800×480, and 390×600. Engine integration tests
 run real RapidOCR and Piper when installed, otherwise they are explicitly
-skipped. OCR is included in the normal test dependencies; install
-`requirements-reader.txt` and run the voice setup to enable the speech tests.
+skipped. OCR and Piper are included in the normal test dependencies; run
+`python scripts/setup_reader.py` before testing to enable the real voice tests.
 Recognition checks include printed text, skew, low contrast, blank/corrupt images,
 and operation without Tesseract or network downloads. No public tunnel is started by the suite.
 

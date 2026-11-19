@@ -18,6 +18,7 @@ import time
 from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
 from reader_worker import OCR_MODEL, ocr_cpu_threads, ocr_model_paths
+from scripts.setup_reader import DEFAULT_VOICE, install_voice
 
 reader_api = Blueprint("reader", __name__, url_prefix="/api")
 ROOT = Path(__file__).resolve().parent
@@ -27,20 +28,51 @@ MAX_AUDIO = 24 * 1024 * 1024
 JOB_TTL = 300
 JOB_TIMEOUTS = {"ocr": 45, "speech": 120}
 log = logging.getLogger(__name__)
+_voice_setup_state = "missing"
 
 
 def voice_path():
-    return Path(os.environ.get("PIPER_MODEL", str(ROOT / "models/en_US-lessac-medium.onnx"))).expanduser().resolve()
+    return Path(os.environ.get("PIPER_MODEL") or ROOT / "models" / f"{DEFAULT_VOICE}.onnx").expanduser().resolve()
+
+
+def voice_files_ready(model):
+    return model.is_file() and Path(str(model) + ".json").is_file()
+
+
+def prepare_default_voice():
+    """Start the first-run download without blocking the camera or OCR."""
+    global _voice_setup_state
+    if (os.environ.get("PIPER_MODEL") or os.environ.get("PIPER_AUTO_DOWNLOAD") == "0"
+            or _voice_setup_state == "preparing" or importlib.util.find_spec("piper") is None):
+        return
+    model = voice_path()
+    if voice_files_ready(model):
+        return
+
+    def download():
+        global _voice_setup_state
+        try:
+            install_voice(DEFAULT_VOICE, model.parent)
+        except Exception:
+            _voice_setup_state = "failed"
+            log.exception("Default Piper voice setup failed. Run python scripts/setup_reader.py to retry.")
+        else:
+            _voice_setup_state = "ready"
+            log.info("Default Piper voice is ready.")
+
+    _voice_setup_state = "preparing"
+    threading.Thread(target=download, name="piper-voice-setup", daemon=True).start()
 
 
 def availability():
     model = voice_path()
     ocr_models = ocr_model_paths()
+    speech = importlib.util.find_spec("piper") is not None and voice_files_ready(model)
     return {
         "ocr": bool(ocr_models) and all(path.is_file() for path in ocr_models.values())
                and importlib.util.find_spec("onnxruntime") is not None,
-        "speech": importlib.util.find_spec("piper") is not None
-                  and model.is_file() and Path(str(model) + ".json").is_file(),
+        "speech": speech,
+        "speech_setup": "ready" if speech else _voice_setup_state,
         "ocr_model": OCR_MODEL,
         "ocr_runtime": "ONNX Runtime CPU",
         "ocr_threads": ocr_cpu_threads(),

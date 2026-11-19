@@ -229,6 +229,31 @@ def test_empty_scan_and_unavailable_voice_have_clear_states(page, viewer_server,
         assert "not available" in page.locator("#reader-notice").inner_text()
 
 
+def test_voice_becomes_available_without_rescanning(page, viewer_server):
+    calls = mock_reader(page)
+    voice_ready = False
+
+    def reader_status(route):
+        route.fulfill(json={
+            "ocr": True, "speech": voice_ready,
+            "speech_setup": "ready" if voice_ready else "preparing",
+        })
+
+    page.route("**/api/reader/status", reader_status)
+    ready_camera(page, viewer_server)
+    page.locator("#read-text-btn").click()
+    page.wait_for_function("document.getElementById('reader-notice').textContent.includes('Setting up the voice')")
+    assert page.locator("#reader-text").inner_text() == READING
+    assert page.locator("#reader-speak").is_disabled()
+
+    voice_ready = True
+    page.locator("#reader-speak").click()
+    page.wait_for_function("!document.getElementById('reader-pause').hidden")
+    assert calls["speech"] == [{"text": READING}]
+    assert len(calls["images"]) == 1
+    assert page.locator("#reader-notice").is_hidden()
+
+
 def test_missing_ocr_explains_installation_update_and_returns_to_camera(page, viewer_server):
     mock_reader(page)
     page.route("**/api/reader/status", lambda route: route.fulfill(json={"ocr": False, "speech": True}))

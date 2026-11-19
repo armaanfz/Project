@@ -18,7 +18,7 @@ import cv2
 import qrcode
 from flask import Flask, render_template, request, send_file
 from flask_socketio import SocketIO
-from reader import reader_api
+from reader import prepare_default_voice, reader_api
 
 
 def _default_socketio_async_mode():
@@ -616,6 +616,7 @@ if __name__ == "__main__":
     if socketio.async_mode == "threading":
         run_kwargs["allow_unsafe_werkzeug"] = True
     atexit.register(_cleanup_resources)
+    prepare_default_voice()
     if os.environ.get("DISABLE_TUNNEL", "").lower() in ("1", "true", "yes"):
         _tunnel_status = "disabled"
     else:
